@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch
 
 from ..build import MODELS
 
@@ -25,8 +24,8 @@ def farthest_point_sample(xyz, npoint):
     """
     Args:
         xyz [point]: (B, N, 3)
-        npoint [number of points]: int 
-    
+        npoint [number of points]: int
+
     Return:
         centroids [sampled pointcloud index]: (B, npoint)
     """
@@ -34,12 +33,12 @@ def farthest_point_sample(xyz, npoint):
     B, N, C = xyz.shape
     centroids = torch.zeros((B, npoint), dtype=torch.long).to(device)
     distance = torch.ones(B, N).to(device) * 1e10
-    farthest = torch.randint(0, N, (B, ), dtype=torch.long).to(device)
+    farthest = torch.randint(0, N, (B,), dtype=torch.long).to(device)
     batch_indices = torch.arange(B, dtype=torch.long).to(device)
     for i in range(npoint):
         centroids[:, i] = farthest
         centroid = xyz[batch_indices, farthest, :].view(B, 1, 3)
-        dist = torch.sum((xyz - centroid)**2, -1)
+        dist = torch.sum((xyz - centroid) ** 2, -1)
         mask = dist < distance
         distance[mask] = dist[mask]
         farthest = torch.max(distance, -1)[1]
@@ -51,12 +50,12 @@ def index2Points(points, idx):
     Args:
         points [point]: (B, N, C)
         idx [sample index data]: (B, S)
-    
+
     Return:
         new_points [indexed points data]: (B, S, C)
 
-	Example:
-	    fps_idx = farthest_point_sample(xyz, npoint)
+        Example:
+            fps_idx = farthest_point_sample(xyz, npoint)
         new_xyz = index_points(xyz, fps_idx)
 
     """
@@ -66,8 +65,12 @@ def index2Points(points, idx):
     view_shape[1:] = [1] * (len(view_shape) - 1)
     repeat_shape = list(idx.shape)
     repeat_shape[0] = 1
-    batch_indices = torch.arange(
-        B, dtype=torch.long).to(device).view(view_shape).repeat(repeat_shape)
+    batch_indices = (
+        torch.arange(B, dtype=torch.long)
+        .to(device)
+        .view(view_shape)
+        .repeat(repeat_shape)
+    )
     new_points = points[batch_indices, idx, :]
     return new_points
 
@@ -79,11 +82,11 @@ def index2kNNPoints(points, knn_idx):
         knn_idx [k-Nearest Neighbor Index]: (B, N, k)
 
     Return:
-    	knn_points [k-Nearest Neighboring points retrieved]: (B, N, k, C)
+        knn_points [k-Nearest Neighboring points retrieved]: (B, N, k, C)
 
-   	Example:
-   		knn_idx = knn(points, k)
-   		knn_points = index2kNNPoints(points, knn_idx)
+        Example:
+                knn_idx = knn(points, k)
+                knn_points = index2kNNPoints(points, knn_idx)
     """
 
     _, _, C = points.shape
@@ -109,8 +112,8 @@ def nearest_interpolation(feature, interp_idx):
     # print("before squeeze shape ",interp_idx.shape)
     # before squeeze shape  torch.Size([1, 58, 1])
     interp_idx = torch.squeeze(interp_idx)
-    if len(interp_idx.shape)==1:
-        interp_idx=interp_idx.unsqueeze(0)
+    if len(interp_idx.shape) == 1:
+        interp_idx = interp_idx.unsqueeze(0)
     # print(" dive into nera ",feature.shape, interp_idx.shape)
     # dive into nera  torch.Size([1, 14, 1024]) torch.Size([58]
     interpolated_features = index2Points(feature, interp_idx)
@@ -118,8 +121,7 @@ def nearest_interpolation(feature, interp_idx):
 
 
 class MLP1d(nn.Module):
-
-    def __init__(self, d_in, d_out, bias=True, bn=True, activation='relu'):
+    def __init__(self, d_in, d_out, bias=True, bn=True, activation="relu"):
         super(MLP1d, self).__init__()
         self.linear = nn.Conv1d(d_in, d_out, kernel_size=1, bias=bias)
 
@@ -128,18 +130,18 @@ class MLP1d(nn.Module):
         else:
             self.bn = None
 
-        if activation == 'lrelu':
+        if activation == "lrelu":
             self.act = nn.LeakyReLU(0.2)
-        elif activation == 'relu':
+        elif activation == "relu":
             self.act = nn.ReLU()
         else:
             self.act = None
 
     def forward(self, x):
         """
-		Input: (B, N, d_in)
-		Output: (B, N, d_out)
-		"""
+        Input: (B, N, d_in)
+        Output: (B, N, d_out)
+        """
         x = x.transpose(1, 2).contiguous()  # (B, d_in, N)
         x = self.linear(x)  # (B, d_out, N)
         if self.bn is not None:
@@ -151,8 +153,7 @@ class MLP1d(nn.Module):
 
 
 class MLP2d(nn.Module):
-
-    def __init__(self, d_in, d_out, bias=True, bn=True, activation='relu'):
+    def __init__(self, d_in, d_out, bias=True, bn=True, activation="relu"):
         super(MLP2d, self).__init__()
         self.linear = nn.Conv2d(d_in, d_out, kernel_size=1, bias=bias)
 
@@ -161,18 +162,18 @@ class MLP2d(nn.Module):
         else:
             self.bn = None
 
-        if activation == 'lrelu':
+        if activation == "lrelu":
             self.act = nn.LeakyReLU(0.2)
-        elif activation == 'relu':
+        elif activation == "relu":
             self.act = nn.ReLU()
         else:
             self.act = None
 
     def forward(self, x):
         """
-		Input: (B, N, k, d_in)
-		Output: (B, N, k, d_out)
-		"""
+        Input: (B, N, k, d_in)
+        Output: (B, N, k, d_out)
+        """
         x = x.transpose(1, 3).contiguous()  # (B, d_in, k, N)
         x = self.linear(x)  # (B, d_out, k, N)
         if self.bn is not None:
@@ -184,8 +185,7 @@ class MLP2d(nn.Module):
 
 
 class MLP1dTrans(nn.Module):
-
-    def __init__(self, d_in, d_out, bias=True, bn=True, activation='relu'):
+    def __init__(self, d_in, d_out, bias=True, bn=True, activation="relu"):
         super(MLP1dTrans, self).__init__()
         self.conv_trans = nn.ConvTranspose1d(d_in, d_out, 1, bias=bias)
 
@@ -194,9 +194,9 @@ class MLP1dTrans(nn.Module):
         else:
             self.bn = None
 
-        if activation == 'lrelu':
+        if activation == "lrelu":
             self.act = nn.LeakyReLU(0.2)
-        elif activation == 'relu':
+        elif activation == "relu":
             self.act = nn.ReLU()
         else:
             self.act = None
@@ -213,8 +213,7 @@ class MLP1dTrans(nn.Module):
 
 
 class MLP2dTrans(nn.Module):
-
-    def __init__(self, d_in, d_out, bias=True, bn=True, activation='relu'):
+    def __init__(self, d_in, d_out, bias=True, bn=True, activation="relu"):
         super(MLP2dTrans, self).__init__()
         self.conv_trans = nn.ConvTranspose2d(d_in, d_out, 1, bias=bias)
 
@@ -223,9 +222,9 @@ class MLP2dTrans(nn.Module):
         else:
             self.bn = None
 
-        if activation == 'lrelu':
+        if activation == "lrelu":
             self.act = nn.LeakyReLU(0.2)
-        elif activation == 'relu':
+        elif activation == "relu":
             self.act = nn.ReLU()
         else:
             self.act = None
@@ -242,11 +241,10 @@ class MLP2dTrans(nn.Module):
 
 
 class BilateralAugmentation(nn.Module):
-
     def __init__(self, d_in, d_out, k=16):
         """
-		Bilateral Augmentation Block
-		"""
+        Bilateral Augmentation Block
+        """
         super(BilateralAugmentation, self).__init__()
         self.k = k
         self.d_in = d_in
@@ -259,13 +257,13 @@ class BilateralAugmentation(nn.Module):
 
     def forward(self, p, f):
         """
-		Args:
-			p [Points]: (B, N, 3)
-			f [Features]: (B, N, d_in)
-		
-		Return:
-			alc [Augmented Local Context / refer to 3.1 in paper]: (B, N, k, d_out)
-		"""
+        Args:
+                p [Points]: (B, N, 3)
+                f [Features]: (B, N, d_in)
+
+        Return:
+                alc [Augmented Local Context / refer to 3.1 in paper]: (B, N, k, d_out)
+        """
 
         knn_idx = knn(p, p, self.k)
         # Encode feature input (Not mentioned in the paper, but implemented in the author's GIT)
@@ -294,8 +292,7 @@ class BilateralAugmentation(nn.Module):
         # Augmented Local Context (alc)
         p_knn_encode = self.mlp3(lgc_aug)  # (B, N, k, d_out // 2)
         f_knn_encode = self.mlp4(lsc_aug)  # (B, N, k, d_out // 2)
-        alc = torch.cat((p_knn_encode, f_knn_encode),
-                        dim=-1)  # (B, N, k, d_out)
+        alc = torch.cat((p_knn_encode, f_knn_encode), dim=-1)  # (B, N, k, d_out)
 
         return alc, p_knn_tilde
 
@@ -307,29 +304,29 @@ class BilateralAugmentation(nn.Module):
 
 
 class MixedLocalAggregation(nn.Module):
-
     def __init__(self, d):
         """
-		Mixed Local Aggregation Block
-		"""
+        Mixed Local Aggregation Block
+        """
         super(MixedLocalAggregation, self).__init__()
         self.mlp0 = MLP2d(d, d, bn=False, activation=False)
         self.mlp1 = MLP2d(2 * d, d)
-        self.mlp2 = MLP2d(d, 2 * d, activation='lrelu')
+        self.mlp2 = MLP2d(d, 2 * d, activation="lrelu")
 
     def forward(self, alc):
         """
-		Args:
-			alc [Aggregated Local Context]: (B, N, k, d)
-		
-		Return:
-			mla [Mixed Local Aggregation]: (B, N, k, 2*d)
+        Args:
+                alc [Aggregated Local Context]: (B, N, k, d)
 
-		"""
+        Return:
+                mla [Mixed Local Aggregation]: (B, N, k, 2*d)
+
+        """
         k_weights = self.mlp0(alc)  # (B, N, k, d)
         k_weights = nn.functional.softmax(k_weights, dim=2)  # (B, N, k, d)
-        alc_weighted_sum = torch.sum(alc * k_weights, dim=2,
-                                     keepdim=True)  # (B, N, 1, d)
+        alc_weighted_sum = torch.sum(
+            alc * k_weights, dim=2, keepdim=True
+        )  # (B, N, 1, d)
         alc_max = torch.max(alc, axis=2, keepdims=True)[0]  # (B, N, 1, d)
         mla = torch.cat((alc_weighted_sum, alc_max), dim=-1)  # (B, N, 1, 2*d)
         mla = self.mlp1(mla)  # (B, N, 1, d)
@@ -339,41 +336,36 @@ class MixedLocalAggregation(nn.Module):
 
 
 class BilateralContextBlock(nn.Module):
-
     def __init__(self, d_in, d_out, k):
         """
-		Bilateral Context Block
-		"""
+        Bilateral Context Block
+        """
         super(BilateralContextBlock, self).__init__()
         self.BA = BilateralAugmentation(d_in, d_out, k)
         self.MLA = MixedLocalAggregation(d_out)
 
     def forward(self, p, f):
         """
-		Args:
-			p [point]: (B, N, 3)
-			f [feature]: (B, N, d_in)
+        Args:
+                p [point]: (B, N, 3)
+                f [feature]: (B, N, d_in)
 
-		Return:
-			f [output feature]: (B, N, 2 * d_in)
-		"""
+        Return:
+                f [output feature]: (B, N, 2 * d_in)
+        """
         f, p_knn_tilde = self.BA(p, f)
         f = self.MLA(f)
         return f, p_knn_tilde
 
+
 @MODELS.register_module()
 class BAAFNet(nn.Module):
-
-    def __init__(self,
-                 n_points=4096,
-                 ds_ratio=4,
-                 k=16,
-                 num_classes=13,
-                 dims=None,
-                 **kwargs):
+    def __init__(
+        self, n_points=4096, ds_ratio=4, k=16, num_classes=13, dims=None, **kwargs
+    ):
         """
-		Bilateral Augmentation and Adaptive Fusion Network (BAAF-Net)
-		"""
+        Bilateral Augmentation and Adaptive Fusion Network (BAAF-Net)
+        """
         super(BAAFNet, self).__init__()
         self.n_points = n_points
         self.ds_ratio = ds_ratio
@@ -381,35 +373,44 @@ class BAAFNet(nn.Module):
         self.dims = dims[1:]
         self.num_layers = len(self.dims) - 1
         # Feature Embed
-        self.mlp0 = MLP1d(dims[0], dims[1] * 2, bn=True, activation='lrelu')
+        self.mlp0 = MLP1d(dims[0], dims[1] * 2, bn=True, activation="lrelu")
         """
 		Input: (B, N, d_in)
 		Output: (B, N, d_out)
 		"""
-        
+
         # Encoders
-        self.EncoderBCBModules = nn.ModuleList([
-            BilateralContextBlock(self.dims[i] * 2, self.dims[i + 1], k=k)
-            for i in range(len(self.dims) - 1)
-        ])
+        self.EncoderBCBModules = nn.ModuleList(
+            [
+                BilateralContextBlock(self.dims[i] * 2, self.dims[i + 1], k=k)
+                for i in range(len(self.dims) - 1)
+            ]
+        )
         # Decoders
-        self.DecoderMLPModules = nn.ModuleList([
-            MLP1d(2 * self.dims[-1 - i], 2 * self.dims[-1 - i])
-            for i in range(self.num_layers)
-        ])
+        self.DecoderMLPModules = nn.ModuleList(
+            [
+                MLP1d(2 * self.dims[-1 - i], 2 * self.dims[-1 - i])
+                for i in range(self.num_layers)
+            ]
+        )
         self.DecoderReconModules = self._getDecoderReconModules()
-        self.DecoderWeightModules = nn.ModuleList([
-            MLP1d(2 * self.dims[0], 1, bn=False, activation=None)
-            for i in range(self.num_layers)
-        ])
+        self.DecoderWeightModules = nn.ModuleList(
+            [
+                MLP1d(2 * self.dims[0], 1, bn=False, activation=None)
+                for i in range(self.num_layers)
+            ]
+        )
         # Classifier
-        self.classifier = nn.Sequential(MLP1d(2 * self.dims[0], 64),
-                                        MLP1d(64, 32), nn.Dropout(p=0.5),
-                                        MLP1d(32, num_classes))
+        self.classifier = nn.Sequential(
+            MLP1d(2 * self.dims[0], 64),
+            MLP1d(64, 32),
+            nn.Dropout(p=0.5),
+            MLP1d(32, num_classes),
+        )
 
     def forward_seg_feat(self, p, f):
-        return p, self.forward(p, f)[0]    
-    
+        return p, self.forward(p, f)[0]
+
     def forward(self, p, f):
         n_points = self.n_points
         f_encoder_list = []
@@ -420,7 +421,7 @@ class BAAFNet(nn.Module):
 
         ## Initial Feature Embedding
         f = self.mlp0(f)
-        # print("track 1",f.shape) 
+        # print("track 1",f.shape)
         # track 1 torch.Size([1, 15000, 8])
 
         #############################################
@@ -430,16 +431,16 @@ class BAAFNet(nn.Module):
             # print("before f shape ",f.shape)
             # before f shape  torch.Size([1, 15000, 8])
             f, p_knn_tilde = self.EncoderBCBModules[i](p, f)
-            if len(f.shape)==2:
-                f=f.unsqueeze(0)
+            if len(f.shape) == 2:
+                f = f.unsqueeze(0)
             # for i in range(len(self.dims) - 1):
             #     print("the module shape ,",self.dims[i] * 2, self.dims[i + 1])
-                # the module shape , 8 16
-                # the module shape , 32 64
-                # the module shape , 128 128
-                # the module shape , 256 256
-                # the module shape , 512 512
-            # print("track 2",f.shape) 
+            # the module shape , 8 16
+            # the module shape , 32 64
+            # the module shape , 128 128
+            # the module shape , 256 256
+            # the module shape , 512 512
+            # print("track 2",f.shape)
             # track 2 torch.Size([15000, 32])
             """
             Args:
@@ -459,7 +460,7 @@ class BAAFNet(nn.Module):
             p_ds = index2Points(p, ds_idx)
             # print("f shape ",p.shape,f.shape,ds_idx.shape,p_ds.shape)
             # p torch.Size([1, 15000, 3])
-            # f torch.Size([15000, 32]) 
+            # f torch.Size([15000, 32])
             # ds_idx torch.Size([1, 3750])
             # p_ds torch.Size([1, 3750, 3])
             f = index2Points(f, ds_idx)
@@ -487,8 +488,7 @@ class BAAFNet(nn.Module):
 
             for j in range(self.num_layers - n):
                 f_interp_i = nearest_interpolation(f, us_idx_list[-j - n - 1])
-                f_cat = torch.cat((f_encoder_list[-j - n - 2], f_interp_i),
-                                  axis=-1)
+                f_cat = torch.cat((f_encoder_list[-j - n - 2], f_interp_i), axis=-1)
                 f = self.DecoderReconModules[n][j](f_cat)
 
             f_decoder_list.append(f)

@@ -5,7 +5,6 @@ Reference: https://github.com/Strawberry-Eat-Mango/PCT_Pytorch
 
 """
 
-from pickle import FALSE
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -21,11 +20,12 @@ class Local_op(nn.Module):
         self.bn2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
-        b, n, s, d = x.size()  # torch.Size([32, 512, 32, 6]) 
-        x = F.relu(self.bn1(self.conv1(x))) # B, D, N
-        x = F.relu(self.bn2(self.conv2(x))) # B, D, N
+        b, n, s, d = x.size()  # torch.Size([32, 512, 32, 6])
+        x = F.relu(self.bn1(self.conv1(x)))  # B, D, N
+        x = F.relu(self.bn2(self.conv2(x)))  # B, D, N
         x, _ = torch.max(x, -1, keepdim=False)
         return x
+
 
 class Pct(nn.Module):
     def __init__(self, output_channels=40, dropout=0.5):
@@ -39,10 +39,11 @@ class Pct(nn.Module):
 
         self.pt_last = Point_Transformer_Last()
 
-        self.conv_fuse = nn.Sequential(nn.Conv1d(1280, 1024, kernel_size=1, bias=False),
-                                    nn.BatchNorm1d(1024),
-                                    nn.LeakyReLU(negative_slope=0.2))
-
+        self.conv_fuse = nn.Sequential(
+            nn.Conv1d(1280, 1024, kernel_size=1, bias=False),
+            nn.BatchNorm1d(1024),
+            nn.LeakyReLU(negative_slope=0.2),
+        )
 
         self.linear1 = nn.Linear(1024, 512, bias=False)
         self.bn6 = nn.BatchNorm1d(512)
@@ -51,9 +52,9 @@ class Pct(nn.Module):
         self.bn7 = nn.BatchNorm1d(256)
         self.dp2 = nn.Dropout(p=dropout)
         self.linear3 = nn.Linear(256, output_channels)
-        # TODO: subsample layer. 
-        self.subsample1 = SubsampleGroup(512, 32, group='knn')        
-        self.subsample2 = SubsampleGroup(256, 32, group='knn')        
+        # TODO: subsample layer.
+        self.subsample1 = SubsampleGroup(512, 32, group="knn")
+        self.subsample2 = SubsampleGroup(256, 32, group="knn")
 
     def forward(self, xyz, x):
         batch_size, _, _ = x.size()
@@ -61,11 +62,11 @@ class Pct(nn.Module):
         x = F.relu(self.bn1(self.conv1(x)))
         # B, D, N
         x = F.relu(self.bn2(self.conv2(x)))
-        
+
         # Embedding layer.
-        new_xyz, new_feature = self.subsample1(xyz, x)         
+        new_xyz, new_feature = self.subsample1(xyz, x)
         feature_0 = self.gather_local_0(new_feature)
-        new_xyz, new_feature = self.subsample2(new_xyz, feature_0) 
+        new_xyz, new_feature = self.subsample2(new_xyz, feature_0)
         feature_1 = self.gather_local_1(new_feature)
 
         # Transformer block.
@@ -81,8 +82,9 @@ class Pct(nn.Module):
 
         return x
 
+
 class Point_Transformer_Last(nn.Module):
-    def __init__(self,  channels=256):
+    def __init__(self, channels=256):
         super(Point_Transformer_Last, self).__init__()
         self.conv1 = nn.Conv1d(channels, channels, kernel_size=1, bias=False)
         self.conv2 = nn.Conv1d(channels, channels, kernel_size=1, bias=False)
@@ -96,10 +98,10 @@ class Point_Transformer_Last(nn.Module):
         self.sa4 = SA_Layer(channels)
 
     def forward(self, x):
-        # 
-        # b, 3, npoint, nsample  
+        #
+        # b, 3, npoint, nsample
         # conv2d 3 -> 128 channels 1, 1
-        # b * npoint, c, nsample 
+        # b * npoint, c, nsample
         # permute reshape
         batch_size, _, N = x.size()
 
@@ -113,6 +115,7 @@ class Point_Transformer_Last(nn.Module):
         x = torch.cat((x1, x2, x3, x4), dim=1)
 
         return x
+
 
 class SA_Layer(nn.Module):
     def __init__(self, channels):
@@ -141,8 +144,8 @@ class SA_Layer(nn.Module):
         attention = attention / (1e-9 + attention.sum(dim=1, keepdim=True))
         # b, c, n
         x_r = torch.bmm(x_v, attention)
-        
-        # TODO: 
+
+        # TODO:
         # x_r = self.act(self.after_norm(self.trans_conv(x - x_r)))
         x_r = self.act(self.after_norm(self.trans_conv(x_r)))
         x = x + x_r
@@ -151,13 +154,13 @@ class SA_Layer(nn.Module):
 
 if __name__ == "__main__":
     B, C, N = 2, 4, 4096
-    K=16
-    device = 'cuda'
+    K = 16
+    device = "cuda"
     points = torch.randn([B, N, 3], device=device, dtype=torch.float)
-    print(points.shape, '\n')
+    print(points.shape, "\n")
     features = torch.randn([B, C, N], device=device, dtype=torch.float)
-    print(features.shape, '\n')
+    print(features.shape, "\n")
 
     pct = Pct().to(device)
-    out = pct(points.transpose(1,2))
+    out = pct(points.transpose(1, 2))
     print(out.shape)

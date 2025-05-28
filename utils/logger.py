@@ -1,14 +1,12 @@
 import functools
 import logging
 import os
-import os.path as osp
 import sys
 from termcolor import colored
 
 import time
 import shortuuid
 import pathlib
-import shutil
 
 
 class _ColorfulFormatter(logging.Formatter):
@@ -33,12 +31,9 @@ class _ColorfulFormatter(logging.Formatter):
 
 # so that calling setup_logger multiple times won't add many handlers
 @functools.lru_cache()
-def setup_logger_dist(output=None,
-                      distributed_rank=0,
-                      *,
-                      color=True,
-                      name="moco",
-                      abbrev_name=None):
+def setup_logger_dist(
+    output=None, distributed_rank=0, *, color=True, name="moco", abbrev_name=None
+):
     """
     Initialize the detectron2 logger and set its verbosity level to "INFO".
     Args:
@@ -57,8 +52,8 @@ def setup_logger_dist(output=None,
         abbrev_name = name
 
     plain_formatter = logging.Formatter(
-        "[%(asctime)s] %(name)s %(levelname)s: %(message)s",
-        datefmt="%m/%d %H:%M:%S")
+        "[%(asctime)s] %(name)s %(levelname)s: %(message)s", datefmt="%m/%d %H:%M:%S"
+    )
     # stdout logging: master only
     if distributed_rank == 0:
         ch = logging.StreamHandler(stream=sys.stdout)
@@ -101,11 +96,9 @@ def _cached_log_stream(filename):
 
 
 # ================ experiment folder ==================
-def generate_exp_directory(cfg,
-                           exp_name=None,
-                           expid=None,
-                           run_name=None,
-                           additional_id=None):
+def generate_exp_directory(
+    cfg, exp_name=None, expid=None, run_name=None, additional_id=None
+):
     """Function to create checkpoint folder.
     Args:
         cfg: configuration dict
@@ -119,21 +112,21 @@ def generate_exp_directory(cfg,
 
     if run_name is None:
         if expid is None:
-            expid = time.strftime('%Y%m%d-%H%M%S-') + str(shortuuid.uuid())
+            expid = time.strftime("%Y%m%d-%H%M%S-") + str(shortuuid.uuid())
             # expid = time.strftime('%Y%m%d-%H%M%S')
         if additional_id is not None:
-            expid += '-' + str(additional_id)
+            expid += "-" + str(additional_id)
         if isinstance(exp_name, list):
-            exp_name = '-'.join(exp_name)
-        run_name = '-'.join([exp_name, expid])
+            exp_name = "-".join(exp_name)
+        run_name = "-".join([exp_name, expid])
     cfg.run_name = run_name
     cfg.run_dir = os.path.join(cfg.root_dir, cfg.run_name)
     cfg.exp_dir = cfg.run_dir
     cfg.log_dir = cfg.run_dir
-    cfg.ckpt_dir = os.path.join(cfg.run_dir, 'checkpoint')
-    cfg.log_path = os.path.join(cfg.run_dir, cfg.run_name + '.log')
+    cfg.ckpt_dir = os.path.join(cfg.run_dir, "checkpoint")
+    cfg.log_path = os.path.join(cfg.run_dir, cfg.run_name + ".log")
 
-    if cfg.get('rank', 0) == 0:
+    if cfg.get("rank", 0) == 0:
         pathlib.Path(cfg.ckpt_dir).mkdir(parents=True, exist_ok=True)
 
 
@@ -145,26 +138,34 @@ def resume_exp_directory(cfg, pretrained_path=None):
     Returns:
         the exp_name, jobname, and folders into cfg
     """
-    pretrained_path = pretrained_path or cfg.get('pretrained_path', None) or cfg.get('pretrained_path', None)
-    if os.path.basename(os.path.dirname(pretrained_path)) == 'checkpoint':
+    pretrained_path = (
+        pretrained_path
+        or cfg.get("pretrained_path", None)
+        or cfg.get("pretrained_path", None)
+    )
+    if os.path.basename(os.path.dirname(pretrained_path)) == "checkpoint":
         cfg.run_dir = os.path.dirname(os.path.dirname(cfg.pretrained_path))
         cfg.log_dir = cfg.run_dir
         cfg.run_name = os.path.basename(cfg.run_dir)
-        cfg.ckpt_dir = os.path.join(cfg.run_dir, 'checkpoint')
-        cfg.code_dir = os.path.join(cfg.run_dir, 'code')
+        cfg.ckpt_dir = os.path.join(cfg.run_dir, "checkpoint")
+        cfg.code_dir = os.path.join(cfg.run_dir, "code")
         # we further config the name by datetime
         cfg.log_path = os.path.join(
-            cfg.run_dir, cfg.run_name + time.strftime('%Y%m%d-%H%M%S-') +
-            str(shortuuid.uuid()) + '.log')
+            cfg.run_dir,
+            cfg.run_name
+            + time.strftime("%Y%m%d-%H%M%S-")
+            + str(shortuuid.uuid())
+            + ".log",
+        )
     else:
-        expid = time.strftime('%Y%m%d-%H%M%S-') + str(shortuuid.uuid())
-        cfg.run_name = '_'.join([os.path.basename(pretrained_path), expid])
+        expid = time.strftime("%Y%m%d-%H%M%S-") + str(shortuuid.uuid())
+        cfg.run_name = "_".join([os.path.basename(pretrained_path), expid])
         cfg.run_dir = os.path.join(cfg.root_dir, cfg.run_name)
         cfg.log_dir = cfg.run_dir
-        cfg.ckpt_dir = os.path.join(cfg.run_dir, 'checkpoint')
-        cfg.code_dir = os.path.join(cfg.run_dir, 'code')
-        cfg.log_path = os.path.join(cfg.run_dir, cfg.run_name + '.log')
-        
-    if cfg.get('rank', 0) == 0:
+        cfg.ckpt_dir = os.path.join(cfg.run_dir, "checkpoint")
+        cfg.code_dir = os.path.join(cfg.run_dir, "code")
+        cfg.log_path = os.path.join(cfg.run_dir, cfg.run_name + ".log")
+
+    if cfg.get("rank", 0) == 0:
         os.makedirs(cfg.run_dir, exist_ok=True)
-    cfg.wandb.tags = ['resume']
+    cfg.wandb.tags = ["resume"]

@@ -5,7 +5,7 @@ from ast import literal_eval
 from typing import Any, Dict, List, Tuple, Union
 from multimethod import multimethod
 import yaml
-import logging 
+import logging
 
 
 def print_args(args, printer=logging.info):
@@ -41,7 +41,7 @@ class EasyConfig(dict):
             extension = os.path.splitext(fpath)[1]
             while os.path.dirname(fpath) != fpath:
                 fpath = os.path.dirname(fpath)
-                fpaths.append(os.path.join(fpath, 'default' + extension))
+                fpaths.append(os.path.join(fpath, "default" + extension))
         for fpath in reversed(fpaths):
             if os.path.exists(fpath):
                 with open(fpath) as f:
@@ -68,16 +68,16 @@ class EasyConfig(dict):
         index = 0
         while index < len(opts):
             opt = opts[index]
-            if opt.startswith('--'):
+            if opt.startswith("--"):
                 opt = opt[2:]
-            if '=' in opt:
-                key, value = opt.split('=', 1)
+            if "=" in opt:
+                key, value = opt.split("=", 1)
                 index += 1
             else:
                 key, value = opt, opts[index + 1]
                 index += 2
             current = self
-            subkeys = key.split('.')
+            subkeys = key.split(".")
             try:
                 value = literal_eval(value)
             except:
@@ -102,12 +102,12 @@ class EasyConfig(dict):
         texts = []
         for key, value in self.items():
             if isinstance(value, EasyConfig):
-                seperator = '\n'
+                seperator = "\n"
             else:
-                seperator = ' '
-            text = key + ':' + seperator + str(value)
-            lines = text.split('\n')
+                seperator = " "
+            text = key + ":" + seperator + str(value)
+            lines = text.split("\n")
             for k, line in enumerate(lines[1:]):
-                lines[k + 1] = (' ' * 2) + line
+                lines[k + 1] = (" " * 2) + line
             texts.extend(lines)
-        return '\n'.join(texts)
+        return "\n".join(texts)

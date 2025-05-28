@@ -1,8 +1,5 @@
-from typing import Tuple
-
 import torch
 from torch.autograd import Function
-import torch.nn as nn
 
 import pointops_cuda
 
@@ -20,8 +17,7 @@ class FurthestSampling(Function):
             n_max = max(offset[i] - offset[i - 1], n_max)
         idx = torch.cuda.IntTensor(new_offset[b - 1].item()).zero_()
         tmp = torch.cuda.FloatTensor(n).fill_(1e10)
-        pointops_cuda.furthestsampling_cuda(
-            b, n_max, xyz, offset, new_offset, tmp, idx)
+        pointops_cuda.furthestsampling_cuda(b, n_max, xyz, offset, new_offset, tmp, idx)
         del tmp
         return idx
 
@@ -43,7 +39,8 @@ class KNNQuery(Function):
         idx = torch.cuda.IntTensor(m, nsample).zero_()
         dist2 = torch.cuda.FloatTensor(m, nsample).zero_()
         pointops_cuda.knnquery_cuda(
-            m, nsample, xyz, new_xyz, offset, new_offset, idx, dist2)
+            m, nsample, xyz, new_xyz, offset, new_offset, idx, dist2
+        )
         return idx, torch.sqrt(dist2)
 
 
@@ -63,7 +60,8 @@ class BallQuery(Function):
         m = new_xyz.shape[0]
         idx = torch.cuda.IntTensor(m, nsample).zero_()
         pointops_cuda.ballquery_cuda(
-            m, radius, nsample, xyz, new_xyz, offset, new_offset, idx)
+            m, radius, nsample, xyz, new_xyz, offset, new_offset, idx
+        )
         return idx
 
 
@@ -92,51 +90,66 @@ class Grouping(Function):
         output: (n, c), None
         """
         n = ctx.n
-        idx, = ctx.saved_tensors
+        (idx,) = ctx.saved_tensors
         m, nsample, c = grad_output.shape
         grad_input = torch.cuda.FloatTensor(n, c).zero_()
         pointops_cuda.grouping_backward_cuda(
-            m, nsample, c, grad_output, idx, grad_input)
+            m, nsample, c, grad_output, idx, grad_input
+        )
         return grad_input, None
 
 
 grouping = Grouping.apply
 
 
-def querygroup(nsample, xyz, new_xyz, feat, offset, new_offset,
-               radius=None, query_method='knn',
-               normalize_dp=False, idx=None
-               ):
+def querygroup(
+    nsample,
+    xyz,
+    new_xyz,
+    feat,
+    offset,
+    new_offset,
+    radius=None,
+    query_method="knn",
+    normalize_dp=False,
+    idx=None,
+):
     """
-    the query and group function 
+    the query and group function
     support KNN and Ball Query
-    input: xyz: (n, 3), new_xyz: (m, 3), feat: (n, c), offset: (b), new_offset: (b), idx: (m, nsample) 
-    output: 
+    input: xyz: (n, 3), new_xyz: (m, 3), feat: (n, c), offset: (b), new_offset: (b), idx: (m, nsample)
+    output:
     """
     assert xyz.is_contiguous() and new_xyz.is_contiguous() and feat.is_contiguous()
     if new_xyz is None:
         new_xyz = xyz
     if idx is None:
         if nsample is not None:
-            if query_method in ['knn', 'knnquery']:
-                idx, _ = knnquery(nsample, xyz, new_xyz,
-                                  offset, new_offset)  # (m, nsample)
+            if query_method in ["knn", "knnquery"]:
+                idx, _ = knnquery(
+                    nsample, xyz, new_xyz, offset, new_offset
+                )  # (m, nsample)
             else:
-                idx = ballquery(radius, nsample, xyz,
-                                new_xyz, offset, new_offset)  # (m, nsample)
+                idx = ballquery(
+                    radius, nsample, xyz, new_xyz, offset, new_offset
+                )  # (m, nsample)
             idx = idx.flatten().long()
             n, m, c = xyz.shape[0], new_xyz.shape[0], feat.shape[1]
-            grouped_xyz = xyz[idx, :].view(
-                m, nsample, 3)  # (m, nsample, 3)
+            grouped_xyz = xyz[idx, :].view(m, nsample, 3)  # (m, nsample, 3)
             grouped_xyz -= new_xyz.unsqueeze(1)  # (m, nsample, 3)
             if normalize_dp:
-                max_dist = grouped_xyz.norm(dim=-1, p=2, keepdim=True).max(dim=-1, keepdim=True)[
-                    0] + 1.0e-8 if query_method == 'knn' else radius
+                max_dist = (
+                    grouped_xyz.norm(dim=-1, p=2, keepdim=True).max(
+                        dim=-1, keepdim=True
+                    )[0]
+                    + 1.0e-8
+                    if query_method == "knn"
+                    else radius
+                )
                 grouped_xyz /= max_dist
 
             if feat is not None:
-                grouped_feat = feat[idx, :].view(
-                    m, nsample, c)  # (m, nsample, c)
+                grouped_feat = feat[idx, :].view(m, nsample, c)  # (m, nsample, c)
             else:
                 grouped_feat = None
         else:
@@ -157,12 +170,10 @@ def queryandgroup(nsample, xyz, new_xyz, feat, idx, offset, new_offset, use_xyz=
     if new_xyz is None:
         new_xyz = xyz
     if idx is None:
-        idx, _ = knnquery(nsample, xyz, new_xyz, offset,
-                          new_offset)  # (m, nsample)
+        idx, _ = knnquery(nsample, xyz, new_xyz, offset, new_offset)  # (m, nsample)
 
     n, m, c = xyz.shape[0], new_xyz.shape[0], feat.shape[1]
-    grouped_xyz = xyz[idx.view(-1).long(), :].view(m,
-                                                   nsample, 3)  # (m, nsample, 3)
+    grouped_xyz = xyz[idx.view(-1).long(), :].view(m, nsample, 3)  # (m, nsample, 3)
     grouped_xyz -= new_xyz.unsqueeze(1)  # (m, nsample, 3)
     grouped_feat = feat[idx.view(-1).long(), :].view(m, nsample, c)
 
@@ -184,7 +195,8 @@ class Subtraction(Function):
         nsample = idx.shape[-1]
         output = torch.cuda.FloatTensor(n, nsample, c).zero_()
         pointops_cuda.subtraction_forward_cuda(
-            n, nsample, c, input1, input2, idx, output)
+            n, nsample, c, input1, input2, idx, output
+        )
         ctx.save_for_backward(idx)
         return output
 
@@ -194,12 +206,13 @@ class Subtraction(Function):
         input: grad_out: (n, nsample, c)
         output: grad_input1: (n, c), grad_input2: (n, c)
         """
-        idx, = ctx.saved_tensors
+        (idx,) = ctx.saved_tensors
         n, nsample, c = grad_output.shape
         grad_input1 = torch.cuda.FloatTensor(n, c).zero_()
         grad_input2 = torch.cuda.FloatTensor(n, c).zero_()
         pointops_cuda.subtraction_backward_cuda(
-            n, nsample, c, idx, grad_output, grad_input1, grad_input2)
+            n, nsample, c, idx, grad_output, grad_input1, grad_input2
+        )
         return grad_input1, grad_input2, None
 
 
@@ -213,12 +226,17 @@ class Aggregation(Function):
         input: input: (n, c), position: (n, nsample, c), weight : (n, nsample, c'), idx: (n, nsample)
         output: (n, c)
         """
-        assert input.is_contiguous() and position.is_contiguous() and weight.is_contiguous()
+        assert (
+            input.is_contiguous()
+            and position.is_contiguous()
+            and weight.is_contiguous()
+        )
         n, nsample, c = position.shape
         w_c = weight.shape[-1]
         output = torch.cuda.FloatTensor(n, c).zero_()
         pointops_cuda.aggregation_forward_cuda(
-            n, nsample, c, w_c, input, position, weight, idx, output)
+            n, nsample, c, w_c, input, position, weight, idx, output
+        )
         ctx.save_for_backward(input, position, weight, idx)
         return output
 
@@ -234,8 +252,20 @@ class Aggregation(Function):
         grad_input = torch.cuda.FloatTensor(n, c).zero_()
         grad_position = torch.cuda.FloatTensor(n, nsample, c).zero_()
         grad_weight = torch.cuda.FloatTensor(n, nsample, w_c).zero_()
-        pointops_cuda.aggregation_backward_cuda(n, nsample, c, w_c, input, position, weight, idx, grad_output,
-                                                grad_input, grad_position, grad_weight)
+        pointops_cuda.aggregation_backward_cuda(
+            n,
+            nsample,
+            c,
+            w_c,
+            input,
+            position,
+            weight,
+            idx,
+            grad_output,
+            grad_input,
+            grad_position,
+            grad_weight,
+        )
         return grad_input, grad_position, grad_weight, None
 
 
@@ -267,16 +297,14 @@ class Interpolation(Function):
         output: (n, c)
         """
         assert xyz.is_contiguous() and new_xyz.is_contiguous() and input.is_contiguous()
-        idx, dist = knnquery(k, xyz, new_xyz, offset,
-                             new_offset)  # (n, k), (n, k)
+        idx, dist = knnquery(k, xyz, new_xyz, offset, new_offset)  # (n, k), (n, k)
         dist_recip = 1.0 / (dist + 1e-8)  # (n, k)
         norm = torch.sum(dist_recip, dim=1, keepdim=True)
         weight = dist_recip / norm  # (n, k)
 
         n, c, m = new_xyz.shape[0], input.shape[1], input.shape[0]
         output = torch.cuda.FloatTensor(n, c).zero_()
-        pointops_cuda.interpolation_forward_cuda(
-            n, c, k, input, idx, weight, output)
+        pointops_cuda.interpolation_forward_cuda(n, c, k, input, idx, weight, output)
         ctx.m, ctx.k = m, k
         ctx.save_for_backward(idx, weight)
         return output
@@ -292,7 +320,8 @@ class Interpolation(Function):
         n, c = grad_output.shape
         grad_input = torch.cuda.FloatTensor(m, c).zero_()
         pointops_cuda.interpolation_backward_cuda(
-            n, c, k, grad_output, idx, weight, grad_input)
+            n, c, k, grad_output, idx, weight, grad_input
+        )
         return None, None, grad_input, None, None, None
 
 

@@ -2,28 +2,26 @@
 # -*- coding: utf-8 -*-
 import torch
 import torch.nn as nn
-from openpoints.models.layers import create_convblock2d, create_grouper, furthest_point_sample, random_sample
+from openpoints.models.layers import create_convblock2d, create_grouper
 import logging
 from ..build import MODELS
 
 
 @MODELS.register_module()
 class GroupPointNet(nn.Module):
-    def __init__(self,
-                 in_channels=3,
-                 channels=64,
-                 n_blocks=5,
-                 sample_fn='furthest_point_sample',  # random, FPS
-                 sample_ratio=0.25,
-                 group_args={'group': 'knn',
-                             'radius': 0.1,
-                             'nsample': 20
-                             },
-                 norm_args={'norm': 'bn'},
-                 act_args={'act': 'leakyrelu', 'negative_slope': 0.2},
-                 conv_args={'order': 'conv-act-norm'},
-                 **kwargs
-                 ):
+    def __init__(
+        self,
+        in_channels=3,
+        channels=64,
+        n_blocks=5,
+        sample_fn="furthest_point_sample",  # random, FPS
+        sample_ratio=0.25,
+        group_args={"group": "knn", "radius": 0.1, "nsample": 20},
+        norm_args={"norm": "bn"},
+        act_args={"act": "leakyrelu", "negative_slope": 0.2},
+        conv_args={"order": "conv-act-norm"},
+        **kwargs,
+    ):
         """
         Args:
             in_channels (int, optional): Dimension of input. Defaults to 3.
@@ -53,14 +51,21 @@ class GroupPointNet(nn.Module):
         in_channels *= 2
         backbone = []
         for i in range(self.n_blocks - 2):
-            backbone.append(create_convblock2d(in_channels, channels,
-                                               act_args=act_args, norm_args=norm_args, **conv_args,
-                                               bias=False))
+            backbone.append(
+                create_convblock2d(
+                    in_channels,
+                    channels,
+                    act_args=act_args,
+                    norm_args=norm_args,
+                    **conv_args,
+                    bias=False,
+                )
+            )
             in_channels = channels
         self.backbone = nn.Sequential(*backbone)
         self.maxpool = lambda x: torch.max(x, dim=-1, keepdim=False)[0]
         self.avgpool = lambda x: torch.mean(x, dim=-1, keepdim=False)
-        self.out_channels = channels*2
+        self.out_channels = channels * 2
         self.model_init()
 
     def model_init(self):
@@ -71,11 +76,13 @@ class GroupPointNet(nn.Module):
                 if m.bias is not None:
                     m.bias.data.zero_()
                     m.bias.requires_grad = True
-            elif isinstance(m, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm2d, nn.BatchNorm1d)):
+            elif isinstance(
+                m, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm2d, nn.BatchNorm1d)
+            ):
                 nn.init.constant_(m.bias, 0)
                 nn.init.constant_(m.weight, 1.0)
 
-    def forward(self, p, f=None):   # position, features
+    def forward(self, p, f=None):  # position, features
         if f is None:
             f = p.transpose(1, 2).contiguous().unsqueeze(-1)
 
@@ -83,7 +90,9 @@ class GroupPointNet(nn.Module):
         idx = self.sample_fn(p, int(p.shape[1] * self.sample_ratio)).long()
         p1 = torch.gather(p, 1, idx.unsqueeze(-1).expand(-1, -1, 3))
 
-        dp, gf = self.grouper(p1, p, f)  # relative position, grouped features (neighborhood features)
+        dp, gf = self.grouper(
+            p1, p, f
+        )  # relative position, grouped features (neighborhood features)
         gf = torch.cat((dp, gf), dim=1)
         f = self.backbone(gf)
         return self.maxpool(f)
@@ -95,6 +104,6 @@ class GroupPointNet(nn.Module):
         f = self.forward_final_feat(pts, features)
         return torch.cat((self.maxpool(f), self.avgpool(f)), dim=1)
 
-    def ssl_forward(self, p, f):   # position, features
+    def ssl_forward(self, p, f):  # position, features
         f = self.backbone(f)
         return self.maxpool(f)

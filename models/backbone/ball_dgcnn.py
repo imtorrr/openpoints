@@ -11,20 +11,21 @@ from ..build import MODELS
 
 @MODELS.register_module()
 class BallDGCNN(nn.Module):
-    def __init__(self,
-                 in_channels=3,
-                 channels=64,
-                 embed_dim=1024,
-                 n_blocks=5,
-                 conv='edge',
-                 k=20,
-                 group='ballquery', 
-                 radius=0.1,
-                 norm_args={'norm': 'bn'},
-                 act_args={'act': 'leakyrelu', 'negative_slope': 0.2},
-                 conv_args={'order': 'conv-act-norm'},
-                 **kwargs
-                 ):
+    def __init__(
+        self,
+        in_channels=3,
+        channels=64,
+        embed_dim=1024,
+        n_blocks=5,
+        conv="edge",
+        k=20,
+        group="ballquery",
+        radius=0.1,
+        norm_args={"norm": "bn"},
+        act_args={"act": "leakyrelu", "negative_slope": 0.2},
+        conv_args={"order": "conv-act-norm"},
+        **kwargs,
+    ):
         """
 
         Args:
@@ -48,31 +49,46 @@ class BallDGCNN(nn.Module):
 
         self.n_blocks = n_blocks
 
-        if 'ball' in group or 'query' in group:
-            self.grouper = QueryAndGroup(nsample=k, radius=radius,
-                                         return_only_idx=True
-                                         )
-        elif 'knn' in group.lower():
+        if "ball" in group or "query" in group:
+            self.grouper = QueryAndGroup(nsample=k, radius=radius, return_only_idx=True)
+        elif "knn" in group.lower():
             self.grouper = KNNGroup(k, return_only_idx=True)
 
-        self.head = GraphConv(in_channels, channels, conv,
-                              norm_args=norm_args, act_args=act_args,
-                              **conv_args)
+        self.head = GraphConv(
+            in_channels,
+            channels,
+            conv,
+            norm_args=norm_args,
+            act_args=act_args,
+            **conv_args,
+        )
         out_channels = [channels]
         in_channels = channels
         backbone = []
         for i in range(self.n_blocks - 2):
-            backbone.append(GraphConv(in_channels, channels, conv,
-                                      act_args=act_args, norm_args=norm_args, **conv_args)
-                            )
+            backbone.append(
+                GraphConv(
+                    in_channels,
+                    channels,
+                    conv,
+                    act_args=act_args,
+                    norm_args=norm_args,
+                    **conv_args,
+                )
+            )
             out_channels.append(channels)
             in_channels = channels
             channels *= 2
         self.backbone = nn.Sequential(*backbone)
         fusion_dims = int(sum(out_channels))
-        self.fusion_block = create_convblock1d(fusion_dims, embed_dim,
-                                               act_args=act_args, norm_args=norm_args, **conv_args,
-                                               bias=False)
+        self.fusion_block = create_convblock1d(
+            fusion_dims,
+            embed_dim,
+            act_args=act_args,
+            norm_args=norm_args,
+            **conv_args,
+            bias=False,
+        )
         self.maxpool = lambda x: torch.max(x, dim=-1, keepdim=False)[0]
         self.avgpool = lambda x: torch.mean(x, dim=-1, keepdim=False)
         self.model_init()
@@ -85,7 +101,9 @@ class BallDGCNN(nn.Module):
                 if m.bias is not None:
                     m.bias.data.zero_()
                     m.bias.requires_grad = True
-            elif isinstance(m, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm2d, nn.BatchNorm1d)):
+            elif isinstance(
+                m, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm2d, nn.BatchNorm1d)
+            ):
                 nn.init.constant_(m.bias, 0)
                 nn.init.constant_(m.weight, 1.0)
 
@@ -108,16 +126,16 @@ class BallDGCNN(nn.Module):
         return torch.cat((self.maxpool(fusion), self.avgpool(fusion)), dim=1)
 
 
-if __name__ == '__main__':
-    device = torch.device('cuda')
+if __name__ == "__main__":
+    device = torch.device("cuda")
 
     feats = torch.rand((2, 3, 1024), dtype=torch.float).to(device)
     points = torch.rand((2, 1024, 3), dtype=torch.float).to(device)
     num_neighbors = 20
 
-    print('Input size {}'.format(feats.size()))
+    print("Input size {}".format(feats.size()))
     net = DGCNN().to(device)
     print(net)
     out = net(points, feats)
 
-    print('Output size {}'.format(out.size()))
+    print("Output size {}".format(out.size()))

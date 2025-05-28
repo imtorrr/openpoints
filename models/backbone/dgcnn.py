@@ -2,8 +2,7 @@
 # -*- coding: utf-8 -*-
 import torch
 import torch.nn as nn
-from torch.nn import Sequential as Seq
-from openpoints.models.layers.graph_conv import DynConv, GraphConv, ResDynBlock, DenseDynBlock, DilatedKNN
+from openpoints.models.layers.graph_conv import DynConv, GraphConv, DilatedKNN
 from openpoints.models.layers import create_convblock1d
 import logging
 from ..build import MODELS
@@ -11,19 +10,20 @@ from ..build import MODELS
 
 @MODELS.register_module()
 class DGCNN(nn.Module):
-    def __init__(self,
-                 in_channels=3,
-                 channels=64,
-                 embed_dim=1024,
-                 n_blocks=5,
-                 conv='edge',
-                 k=20,
-                 norm_args={'norm': 'bn'},
-                 act_args={'act': 'leakyrelu', 'negative_slope': 0.2},
-                 conv_args={'order': 'conv-norm-act'},
-                 is_seg=False, 
-                 **kwargs
-                 ):
+    def __init__(
+        self,
+        in_channels=3,
+        channels=64,
+        embed_dim=1024,
+        n_blocks=5,
+        conv="edge",
+        k=20,
+        norm_args={"norm": "bn"},
+        act_args={"act": "leakyrelu", "negative_slope": 0.2},
+        conv_args={"order": "conv-norm-act"},
+        is_seg=False,
+        **kwargs,
+    ):
         """
         Args:
             in_channels (int, optional): Dimension of input. Defaults to 3.
@@ -47,31 +47,49 @@ class DGCNN(nn.Module):
         self.n_blocks = n_blocks
 
         self.knn = DilatedKNN(k, 1)
-        self.head = GraphConv(in_channels, channels, conv,
-                              norm_args=norm_args, act_args=act_args,
-                              **conv_args)
+        self.head = GraphConv(
+            in_channels,
+            channels,
+            conv,
+            norm_args=norm_args,
+            act_args=act_args,
+            **conv_args,
+        )
         out_channels = [channels]
         in_channels = channels
         backbone = []
         for i in range(self.n_blocks - 2):
-            backbone.append(DynConv(in_channels, channels, conv, k,
-                                    act_args=act_args, norm_args=norm_args, **conv_args)
-                            )
+            backbone.append(
+                DynConv(
+                    in_channels,
+                    channels,
+                    conv,
+                    k,
+                    act_args=act_args,
+                    norm_args=norm_args,
+                    **conv_args,
+                )
+            )
             out_channels.append(channels)
             in_channels = channels
             channels *= 2
         self.backbone = nn.Sequential(*backbone)
         fusion_dims = int(sum(out_channels))
-        self.fusion_block = create_convblock1d(fusion_dims, embed_dim,
-                                               act_args=act_args, norm_args=norm_args, **conv_args,
-                                               bias=False)
+        self.fusion_block = create_convblock1d(
+            fusion_dims,
+            embed_dim,
+            act_args=act_args,
+            norm_args=norm_args,
+            **conv_args,
+            bias=False,
+        )
         self.maxpool = lambda x: torch.max(x, dim=-1, keepdim=False)[0]
         self.avgpool = lambda x: torch.mean(x, dim=-1, keepdim=False)
         self.out_channels = embed_dim if is_seg else embed_dim * 2
 
     def forward(self, pts, features=None):
-        if hasattr(pts, 'keys'):
-            pts, features = pts['pos'], pts['x']
+        if hasattr(pts, "keys"):
+            pts, features = pts["pos"], pts["x"]
         if features is None:
             features = pts.transpose(1, 2).contiguous()
         features = features.unsqueeze(-1)
@@ -83,15 +101,15 @@ class DGCNN(nn.Module):
         return fusion
 
     def forward_seg_feat(self, pts, features=None):
-        feats = self.forward(pts, features)    
+        feats = self.forward(pts, features)
         return pts, feats
-    
+
     def forward_final_feat(self, pts, features=None):
         self.forward(pts, features)
 
     def forward_cls_feat(self, pts, features=None):
-        if hasattr(pts, 'keys'):
-            pts, features = pts['pos'], pts['x']
+        if hasattr(pts, "keys"):
+            pts, features = pts["pos"], pts["x"]
         if features is None:
             features = pts.transpose(1, 2).contiguous().unsqueeze(-1)
         if len(features.shape) < 4:
@@ -104,16 +122,16 @@ class DGCNN(nn.Module):
         return torch.cat((self.maxpool(fusion), self.avgpool(fusion)), dim=1)
 
 
-if __name__ == '__main__':
-    device = torch.device('cuda')
+if __name__ == "__main__":
+    device = torch.device("cuda")
 
     feats = torch.rand((2, 3, 1024), dtype=torch.float).to(device)
     points = torch.rand((2, 1024, 3), dtype=torch.float).to(device)
     num_neighbors = 20
 
-    print('Input size {}'.format(feats.size()))
+    print("Input size {}".format(feats.size()))
     net = DGCNN().to(device)
     print(net)
     out = net(points, feats)
 
-    print('Output size {}'.format(out.size()))
+    print("Output size {}".format(out.size()))

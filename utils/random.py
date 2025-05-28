@@ -1,6 +1,6 @@
 import numpy as np
 import random
-import torch 
+import torch
 
 
 def set_random_seed(seed=0, deterministic=False):
@@ -12,5 +12,5 @@ def set_random_seed(seed=0, deterministic=False):
     torch.backends.cudnn.benchmark = True
 
     if deterministic:
-        torch.backends.cudnn.deterministic = True 
+        torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False

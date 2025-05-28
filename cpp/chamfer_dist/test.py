@@ -15,7 +15,11 @@ import unittest
 
 from torch.autograd import gradcheck
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir)))
+sys.path.append(
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir)
+    )
+)
 from openpoints.cpp.chamfer_dist import ChamferFunction
 
 
@@ -28,7 +32,7 @@ class ChamferDistanceTestCase(unittest.TestCase):
         print(gradcheck(ChamferFunction.apply, [x.cuda(), y.cuda()]))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     x = torch.rand(32, 128, 3)
     y = torch.rand(32, 128, 3)
     # print()

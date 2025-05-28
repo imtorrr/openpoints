@@ -12,13 +12,8 @@ from ..build import DATASETS
 
 @DATASETS.register_module()
 class PCQM4Mv2Dataset(DatasetBase):
-    def __init__(self,
-                 dataset_path,
-                 dataset_name='PCQM4MV2',
-                 **kwargs
-                 ):
-        super().__init__(dataset_name=dataset_name,
-                         **kwargs)
+    def __init__(self, dataset_path, dataset_name="PCQM4MV2", **kwargs):
+        super().__init__(dataset_name=dataset_name, **kwargs)
         self.dataset_path = dataset_path
 
     @property
@@ -40,6 +35,7 @@ class PCQM4Mv2Dataset(DatasetBase):
 
             # details: https://ogb.stanford.edu/docs/lsc/pcqm4mv2/
             from ogb.utils import smiles2graph
+
             self._smiles2graph = smiles2graph
             self._dataset = PCQM4Mv2Dataset(root=self.dataset_path, only_smiles=True)
             return self._dataset
@@ -49,21 +45,23 @@ class PCQM4Mv2Dataset(DatasetBase):
         try:
             return self._record_tokens
         except AttributeError:
-            split = {'training': 'train',
-                     'validation': 'valid',
-                     'test': 'test-dev',
-                     'challenge': 'test-challenge'}[self.split]
+            split = {
+                "training": "train",
+                "validation": "valid",
+                "test": "test-dev",
+                "challenge": "test-challenge",
+            }[self.split]
             self._record_tokens = self.dataset.get_idx_split()[split]
             return self._record_tokens
 
     def read_record(self, token):
         smiles, target = self.dataset[token]
         graph = self._smiles2graph(smiles)
-        graph['num_nodes'] = np.array(graph['num_nodes'], dtype=np.int16)
-        graph['edges'] = graph.pop('edge_index').T.astype(np.int16)
-        graph['edge_features'] = graph.pop('edge_feat').astype(np.int16)
-        graph['node_features'] = graph.pop('node_feat').astype(np.int16)
-        graph['target'] = np.array(target, np.float32)
+        graph["num_nodes"] = np.array(graph["num_nodes"], dtype=np.int16)
+        graph["edges"] = graph.pop("edge_index").T.astype(np.int16)
+        graph["edge_features"] = graph.pop("edge_feat").astype(np.int16)
+        graph["node_features"] = graph.pop("node_feat").astype(np.int16)
+        graph["target"] = np.array(target, np.float32)
         return graph
 
 

@@ -1,13 +1,3 @@
-import torch
-import torch.utils.data as data
-
-
-
-
-
-
-
-
 # class S3DIS(data.Dataset):
 #     r"""The (pre-processed) Stanford Large-Scale 3D Indoor Spaces dataset from
 #     the `"3D Semantic Parsing of Large-Scale Indoor Spaces"

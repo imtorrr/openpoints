@@ -11,17 +11,16 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 
 setup(
-    name='emd_ext',
+    name="emd_ext",
     ext_modules=[
         CUDAExtension(
-            name='emd_cuda',
+            name="emd_cuda",
             sources=[
-                'cuda/emd.cpp',
-                'cuda/emd_kernel.cu',
+                "cuda/emd.cpp",
+                "cuda/emd_kernel.cu",
             ],
-            extra_compile_args={'cxx': ['-g'], 'nvcc': ['-O2']}
+            extra_compile_args={"cxx": ["-g"], "nvcc": ["-O2"]},
         ),
     ],
-    cmdclass={
-        'build_ext': BuildExtension
-    })
+    cmdclass={"build_ext": BuildExtension},
+)

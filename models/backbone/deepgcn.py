@@ -3,7 +3,13 @@
 import torch
 import torch.nn as nn
 from torch.nn import Sequential as Seq
-from openpoints.models.layers.graph_conv import DynConv, GraphConv, ResDynBlock, DenseDynBlock, DilatedKNN
+from openpoints.models.layers.graph_conv import (
+    DynConv,
+    GraphConv,
+    ResDynBlock,
+    DenseDynBlock,
+    DilatedKNN,
+)
 from openpoints.models.layers import create_convblock1d
 import logging
 from ..build import MODELS
@@ -11,23 +17,24 @@ from ..build import MODELS
 
 @MODELS.register_module()
 class DeepGCN(nn.Module):
-    def __init__(self,
-                 in_channels=3,
-                 channels=64,
-                 emb_dims=1024,
-                 n_blocks=14,
-                 conv='edge',
-                 block='res',
-                 k=16,
-                 epsilon=0.2,
-                 use_stochastic=True,
-                 use_dilation=True,
-                 norm_args={'norm': 'bn'},
-                 act_args={'act': 'relu'},
-                 conv_args={'order': 'conv-norm-act'},
-                 is_seg=False, 
-                 **kwargs
-                 ):
+    def __init__(
+        self,
+        in_channels=3,
+        channels=64,
+        emb_dims=1024,
+        n_blocks=14,
+        conv="edge",
+        block="res",
+        k=16,
+        epsilon=0.2,
+        use_stochastic=True,
+        use_dilation=True,
+        norm_args={"norm": "bn"},
+        act_args={"act": "relu"},
+        conv_args={"order": "conv-norm-act"},
+        is_seg=False,
+        **kwargs,
+    ):
         """
         Args:
             in_channels (int, optional): Dimension of input. Defaults to 3.
@@ -52,48 +59,111 @@ class DeepGCN(nn.Module):
         self.n_blocks = n_blocks
 
         self.knn = DilatedKNN(k, 1, use_stochastic, epsilon)
-        self.head = GraphConv(in_channels, channels, conv, bias=False,
-                              norm_args=norm_args, act_args=act_args,
-                              **conv_args)
+        self.head = GraphConv(
+            in_channels,
+            channels,
+            conv,
+            bias=False,
+            norm_args=norm_args,
+            act_args=act_args,
+            **conv_args,
+        )
 
-        if block.lower() == 'dense':
-            self.backbone = Seq(*[DenseDynBlock(channels + c_growth * i, c_growth, conv,
-                                                k, 1 + i, use_stochastic, epsilon,
-                                                act_args=act_args, norm_args=norm_args, **conv_args)
-                                  for i in range(self.n_blocks - 1)])
+        if block.lower() == "dense":
+            self.backbone = Seq(
+                *[
+                    DenseDynBlock(
+                        channels + c_growth * i,
+                        c_growth,
+                        conv,
+                        k,
+                        1 + i,
+                        use_stochastic,
+                        epsilon,
+                        act_args=act_args,
+                        norm_args=norm_args,
+                        **conv_args,
+                    )
+                    for i in range(self.n_blocks - 1)
+                ]
+            )
             fusion_dims = int(
-                (channels + channels + c_growth * (self.n_blocks - 1)) * self.n_blocks // 2)
+                (channels + channels + c_growth * (self.n_blocks - 1))
+                * self.n_blocks
+                // 2
+            )
 
-        elif block.lower() == 'res':
+        elif block.lower() == "res":
             if use_dilation:
-                self.backbone = Seq(*[ResDynBlock(channels, conv,
-                                                  k, 1 + i, use_stochastic, epsilon,
-                                                  act_args=act_args, norm_args=norm_args, **conv_args)
-                                      for i in range(self.n_blocks - 1)])
+                self.backbone = Seq(
+                    *[
+                        ResDynBlock(
+                            channels,
+                            conv,
+                            k,
+                            1 + i,
+                            use_stochastic,
+                            epsilon,
+                            act_args=act_args,
+                            norm_args=norm_args,
+                            **conv_args,
+                        )
+                        for i in range(self.n_blocks - 1)
+                    ]
+                )
             else:
-                self.backbone = Seq(*[ResDynBlock(channels, conv,
-                                                  k, 1, use_stochastic, epsilon,
-                                                  act_args=act_args, norm_args=norm_args, **conv_args)
-                                      for i in range(self.n_blocks - 1)])
+                self.backbone = Seq(
+                    *[
+                        ResDynBlock(
+                            channels,
+                            conv,
+                            k,
+                            1,
+                            use_stochastic,
+                            epsilon,
+                            act_args=act_args,
+                            norm_args=norm_args,
+                            **conv_args,
+                        )
+                        for i in range(self.n_blocks - 1)
+                    ]
+                )
             fusion_dims = int(channels + c_growth * (self.n_blocks - 1))
         else:
             # Plain GCN. No dilation, no stochastic, no residual connections
             stochastic = False
-            self.backbone = Seq(*[DynConv(channels, channels, conv,
-                                          k, 1, stochastic, epsilon,
-                                          act_args=act_args, norm_args=norm_args, **conv_args)
-                                  for i in range(self.n_blocks - 1)])
+            self.backbone = Seq(
+                *[
+                    DynConv(
+                        channels,
+                        channels,
+                        conv,
+                        k,
+                        1,
+                        stochastic,
+                        epsilon,
+                        act_args=act_args,
+                        norm_args=norm_args,
+                        **conv_args,
+                    )
+                    for i in range(self.n_blocks - 1)
+                ]
+            )
             fusion_dims = int(channels + c_growth * (self.n_blocks - 1))
 
-        self.fusion_block = create_convblock1d(fusion_dims, emb_dims,
-                                               act_args={'act': 'leakyrelu', 'negative_slope': 0.2},
-                                               norm_args=norm_args, **conv_args,
-                                               bias=False)
+        self.fusion_block = create_convblock1d(
+            fusion_dims,
+            emb_dims,
+            act_args={"act": "leakyrelu", "negative_slope": 0.2},
+            norm_args=norm_args,
+            **conv_args,
+            bias=False,
+        )
         self.model_init()
         self.maxpool = lambda x: torch.max(x, dim=-1, keepdim=False)[0]
         self.avgpool = lambda x: torch.mean(x, dim=-1, keepdim=False)
         self.out_channels = emb_dims if is_seg else emb_dims * 2
-        
+
     def model_init(self):
         for m in self.modules():
             if isinstance(m, (torch.nn.Conv2d, torch.nn.Conv1d)):
@@ -102,21 +172,23 @@ class DeepGCN(nn.Module):
                 if m.bias is not None:
                     m.bias.data.zero_()
                     m.bias.requires_grad = True
-            elif isinstance(m, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm2d, nn.BatchNorm1d)):
+            elif isinstance(
+                m, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm2d, nn.BatchNorm1d)
+            ):
                 nn.init.constant_(m.bias, 0)
                 nn.init.constant_(m.weight, 1.0)
-                
+
     def forward_seg_feat(self, pts, features=None):
         fusion = self.forward(pts, features)
         return pts, fusion
-    
+
     def forward_cls_feat(self, pts, features=None):
         fusion = self.forward(pts, features)
         return torch.cat((self.maxpool(fusion), self.avgpool(fusion)), dim=1)
-    
+
     def forward(self, pts, features=None):
-        if hasattr(pts, 'keys'):
-            pts, features = pts['pos'], pts['x']
+        if hasattr(pts, "keys"):
+            pts, features = pts["pos"], pts["x"]
         if features is None:
             features = pts.transpose(1, 2).contiguous()
         features = features.unsqueeze(-1)
@@ -128,16 +200,16 @@ class DeepGCN(nn.Module):
         return fusion
 
 
-if __name__ == '__main__':
-    device = torch.device('cuda')
+if __name__ == "__main__":
+    device = torch.device("cuda")
 
     feats = torch.rand((2, 3, 1024), dtype=torch.float).to(device)
     points = torch.rand((2, 1024, 3), dtype=torch.float).to(device)
     num_neighbors = 20
 
-    print('Input size {}'.format(feats.size()))
+    print("Input size {}".format(feats.size()))
     net = DeepGCN().to(device)
     print(net)
     out = net(points, feats)
 
-    print('Output size {}'.format(out.size()))
+    print("Output size {}".format(out.size()))

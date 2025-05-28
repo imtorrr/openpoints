@@ -12,4 +12,8 @@ from .nvnovograd import NvNovoGrad
 from .radam import RAdam
 from .rmsprop_tf import RMSpropTF
 from .sgdp import SGDP
-from .optim_factory import build_optimizer_from_cfg, optimizer_kwargs, LayerDecayValueAssigner
+from .optim_factory import (
+    build_optimizer_from_cfg,
+    optimizer_kwargs,
+    LayerDecayValueAssigner,
+)

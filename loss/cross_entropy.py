@@ -1,4 +1,4 @@
-""" Cross Entropy w/ smoothing or soft targets
+"""Cross Entropy w/ smoothing or soft targets
 
 Borrowed from Ross Wightman (https://www.github.com/timm)
 """
@@ -11,12 +11,12 @@ from .build import LOSS
 
 @LOSS.register_module()
 class LabelSmoothingCrossEntropy(nn.Module):
-    """ NLL loss with label smoothing.
-    """
+    """NLL loss with label smoothing."""
+
     def __init__(self, label_smoothing=0.1):
         super(LabelSmoothingCrossEntropy, self).__init__()
         self.smoothing = label_smoothing
-        self.confidence = 1. - self.smoothing
+        self.confidence = 1.0 - self.smoothing
 
     def forward(self, x: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         logprobs = F.log_softmax(x, dim=1)
@@ -29,7 +29,6 @@ class LabelSmoothingCrossEntropy(nn.Module):
 
 @LOSS.register_module()
 class SoftTargetCrossEntropy(nn.Module):
-
     def __init__(self, **kwargs):
         super(SoftTargetCrossEntropy, self).__init__()
 

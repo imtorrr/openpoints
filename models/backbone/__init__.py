@@ -4,7 +4,7 @@ from .pointnext import PointNextEncoder, PointNextDecoder
 from .dgcnn import DGCNN
 from .deepgcn import DeepGCN
 from .pointmlp import PointMLPEncoder, PointMLP
-from .pointvit import PointViT, PointViTDecoder 
+from .pointvit import PointViT, PointViTDecoder
 from .pointvit_inv import InvPointViT
 from .pct import Pct
 from .curvenet import CurveNet

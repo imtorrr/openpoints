@@ -1,16 +1,17 @@
 # from open3d import linux as open3d
-from os.path import join
 import numpy as np
-import colorsys, random, os, sys
+import colorsys
+import random
+import os
+import sys
 import pandas as pd
-from tqdm import tqdm
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 sys.path.append(BASE_DIR)
-sys.path.append(os.path.join(BASE_DIR, 'utils'))
+sys.path.append(os.path.join(BASE_DIR, "utils"))
 
 import cpp_wrappers.cpp_subsampling.grid_subsampling as cpp_subsampling
 import nearest_neighbors.lib.python.nearest_neighbors as nearest_neighbors
@@ -30,14 +31,19 @@ class ConfigSemanticKITTI:
 
     sub_sampling_ratio = [4, 4, 4, 4]  # sampling ratio of random sampling at each layer
     d_out = [16, 64, 128, 256]  # feature dimension
-    num_sub_points = [num_points // 4, num_points // 16, num_points // 64, num_points // 256]
+    num_sub_points = [
+        num_points // 4,
+        num_points // 16,
+        num_points // 64,
+        num_points // 256,
+    ]
 
     noise_init = 3.5  # noise initial parameter
     max_epoch = 100  # maximum epoch during training
     learning_rate = 1e-2  # initial learning rate
     lr_decays = {i: 0.95 for i in range(0, 500)}  # decay rate of learning rate
 
-    train_sum_dir = 'train_log'
+    train_sum_dir = "train_log"
     saving = True
     saving_path = None
 
@@ -54,7 +60,13 @@ class ConfigS3DIS:
     train_steps = 500  # Number of steps per epochs
     val_steps = 100  # Number of validation steps per epoch
 
-    sub_sampling_ratio = [4, 4, 4, 4, 2]  # sampling ratio of random sampling at each layer
+    sub_sampling_ratio = [
+        4,
+        4,
+        4,
+        4,
+        2,
+    ]  # sampling ratio of random sampling at each layer
     d_out = [16, 64, 128, 256, 512]  # feature dimension
 
     noise_init = 3.5  # noise initial parameter
@@ -62,7 +74,7 @@ class ConfigS3DIS:
     learning_rate = 1e-2  # initial learning rate
     lr_decays = {i: 0.95 for i in range(0, 500)}  # decay rate of learning rate
 
-    train_sum_dir = 'train_log'
+    train_sum_dir = "train_log"
     saving = True
     saving_path = None
 
@@ -79,7 +91,13 @@ class ConfigSemantic3D:
     train_steps = 500  # Number of steps per epochs
     val_steps = 100  # Number of validation steps per epoch
 
-    sub_sampling_ratio = [4, 4, 4, 4, 2]  # sampling ratio of random sampling at each layer
+    sub_sampling_ratio = [
+        4,
+        4,
+        4,
+        4,
+        2,
+    ]  # sampling ratio of random sampling at each layer
     d_out = [16, 64, 128, 256, 512]  # feature dimension
 
     noise_init = 3.5  # noise initial parameter
@@ -87,30 +105,34 @@ class ConfigSemantic3D:
     learning_rate = 1e-2  # initial learning rate
     lr_decays = {i: 0.95 for i in range(0, 500)}  # decay rate of learning rate
 
-    train_sum_dir = 'train_log'
+    train_sum_dir = "train_log"
     saving = True
     saving_path = None
 
     augment_scale_anisotropic = True
     augment_mirror = [True, False, False]
-    augment_rotation = 'vertical'
+    augment_rotation = "vertical"
     augment_scale_min = 0.8
     augment_scale_max = 1.2
     augment_noise = 0.001
-    augment_occlusion = 'none'
+    augment_occlusion = "none"
     augment_color = 0.8
 
 
 class DataProcessing:
     @staticmethod
     def load_pc_semantic3d(filename):
-        pc_pd = pd.read_csv(filename, header=None, delim_whitespace=True, dtype=np.float16)
+        pc_pd = pd.read_csv(
+            filename, header=None, delim_whitespace=True, dtype=np.float16
+        )
         pc = pc_pd.values
         return pc
 
     @staticmethod
     def load_label_semantic3d(filename):
-        label_pd = pd.read_csv(filename, header=None, delim_whitespace=True, dtype=np.uint8)
+        label_pd = pd.read_csv(
+            filename, header=None, delim_whitespace=True, dtype=np.uint8
+        )
         cloud_labels = label_pd.values
         return cloud_labels
 
@@ -127,7 +149,7 @@ class DataProcessing:
         label = label.reshape((-1))
         sem_label = label & 0xFFFF  # semantic label in lower half
         inst_label = label >> 16  # instance id in upper half
-        assert ((sem_label + (inst_label << 16) == label).all())
+        assert (sem_label + (inst_label << 16) == label).all()
         sem_label = remap_lut[sem_label]
         return sem_label.astype(np.int32)
 
@@ -171,12 +193,21 @@ class DataProcessing:
         if (features is None) and (labels is None):
             return cpp_subsampling.compute(points, sampleDl=grid_size, verbose=verbose)
         elif labels is None:
-            return cpp_subsampling.compute(points, features=features, sampleDl=grid_size, verbose=verbose)
+            return cpp_subsampling.compute(
+                points, features=features, sampleDl=grid_size, verbose=verbose
+            )
         elif features is None:
-            return cpp_subsampling.compute(points, classes=labels, sampleDl=grid_size, verbose=verbose)
+            return cpp_subsampling.compute(
+                points, classes=labels, sampleDl=grid_size, verbose=verbose
+            )
         else:
-            return cpp_subsampling.compute(points, features=features, classes=labels, sampleDl=grid_size,
-                                           verbose=verbose)
+            return cpp_subsampling.compute(
+                points,
+                features=features,
+                classes=labels,
+                sampleDl=grid_size,
+                verbose=verbose,
+            )
 
     @staticmethod
     def IoU_from_confusions(confusions):
@@ -209,12 +240,30 @@ class DataProcessing:
     def get_class_weights(dataset_name):
         # pre-calculate the number of points in each category
         num_per_class = []
-        if dataset_name is 'S3DIS':
-            num_per_class = np.array([3370714, 2856755, 4919229, 318158, 375640, 478001, 974733,
-                                      650464, 791496, 88727, 1284130, 229758, 2272837], dtype=np.int32)
-        elif dataset_name is 'Semantic3D':
-            num_per_class = np.array([5181602, 5012952, 6830086, 1311528, 10476365, 946982, 334860, 269353],
-                                     dtype=np.int32)
+        if dataset_name == "S3DIS":
+            num_per_class = np.array(
+                [
+                    3370714,
+                    2856755,
+                    4919229,
+                    318158,
+                    375640,
+                    478001,
+                    974733,
+                    650464,
+                    791496,
+                    88727,
+                    1284130,
+                    229758,
+                    2272837,
+                ],
+                dtype=np.int32,
+            )
+        elif dataset_name == "Semantic3D":
+            num_per_class = np.array(
+                [5181602, 5012952, 6830086, 1311528, 10476365, 946982, 334860, 269353],
+                dtype=np.int32,
+            )
 
 
 class Plot:
@@ -272,14 +321,19 @@ class Plot:
             ### bbox
             valid_xyz = pc_xyz[valid_ind]
 
-            xmin = np.min(valid_xyz[:, 0]);
+            xmin = np.min(valid_xyz[:, 0])
             xmax = np.max(valid_xyz[:, 0])
-            ymin = np.min(valid_xyz[:, 1]);
+            ymin = np.min(valid_xyz[:, 1])
             ymax = np.max(valid_xyz[:, 1])
-            zmin = np.min(valid_xyz[:, 2]);
+            zmin = np.min(valid_xyz[:, 2])
             zmax = np.max(valid_xyz[:, 2])
             sem_ins_bbox.append(
-                [[xmin, ymin, zmin], [xmax, ymax, zmax], [min(tp[0], 1.), min(tp[1], 1.), min(tp[2], 1.)]])
+                [
+                    [xmin, ymin, zmin],
+                    [xmax, ymax, zmax],
+                    [min(tp[0], 1.0), min(tp[1], 1.0), min(tp[2], 1.0)],
+                ]
+            )
 
         Y_semins = np.concatenate([pc_xyz[:, 0:3], Y_colors], axis=-1)
         Plot.draw_pc(Y_semins)

@@ -1,1 +1,1 @@
-from .matterport3d import MP40 
+from .matterport3d import MP40

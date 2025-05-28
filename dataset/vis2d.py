@@ -1,9 +1,9 @@
-import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
 import torchvision.transforms.functional as F
-plt.rcParams["savefig.bbox"] = 'tight'
+
+plt.rcParams["savefig.bbox"] = "tight"
 
 
 def show_imgs(imgs):

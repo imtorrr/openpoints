@@ -30,11 +30,11 @@ def create_act(act_args):
     if act_args is None:
         return None
     act_args = copy.deepcopy(act_args)
-    
-    if isinstance(act_args , str):
-        act_args = {"act": act_args}    
-    
-    act = act_args.pop('act', None)
+
+    if isinstance(act_args, str):
+        act_args = {"act": act_args}
+
+    act = act_args.pop("act", None)
     if act is None:
         return None
 
@@ -43,15 +43,15 @@ def create_act(act_args):
         assert act in _ACT_LAYER.keys(), f"input {act} is not supported"
         act_layer = _ACT_LAYER[act]
 
-    inplace = act_args.pop('inplace', True)
+    inplace = act_args.pop("inplace", True)
 
-    if act not in ['gelu', 'sigmoid']: # TODO: add others
+    if act not in ["gelu", "sigmoid"]:  # TODO: add others
         return act_layer(inplace=inplace, **act_args)
     else:
         return act_layer(**act_args)
 
 
 if __name__ == "__main__":
-    act_args = {'act': 'relu', 'inplace': False}
+    act_args = {"act": "relu", "inplace": False}
     act_layer = create_act(act_args)
     print(act_layer)

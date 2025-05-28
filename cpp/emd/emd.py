@@ -21,11 +21,9 @@ class EarthMoverDistanceFunction(torch.autograd.Function):
         return grad_xyz1, grad_xyz2
 
 
-
-
 class earth_mover_distance(torch.nn.Module):
-    f''' emd
-    '''
+    """emd"""
+
     def __init__(self):
         super().__init__()
 
@@ -45,8 +43,10 @@ class earth_mover_distance(torch.nn.Module):
 
         cost = EarthMoverDistanceFunction.apply(xyz1, xyz2)
         cost = cost / xyz1.size(1)
-        
+
         return cost.mean()
+
+
 # def earth_mover_distance(xyz1, xyz2, transpose=True):
 #     """Earth Mover Distance (Approx)
 
@@ -69,4 +69,3 @@ class earth_mover_distance(torch.nn.Module):
 #         xyz2 = xyz2.transpose(1, 2)
 #     cost = EarthMoverDistanceFunction.apply(xyz1, xyz2)
 #     return cost
-

@@ -3,19 +3,22 @@ import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from openpoints.utils import registry
 
-LOSS = registry.Registry('loss')
-LOSS.register_module(name='CrossEntropy', module=CrossEntropyLoss)
-LOSS.register_module(name='CrossEntropyLoss', module=CrossEntropyLoss)
-LOSS.register_module(name='BCEWithLogitsLoss', module=BCEWithLogitsLoss)
+LOSS = registry.Registry("loss")
+LOSS.register_module(name="CrossEntropy", module=CrossEntropyLoss)
+LOSS.register_module(name="CrossEntropyLoss", module=CrossEntropyLoss)
+LOSS.register_module(name="BCEWithLogitsLoss", module=BCEWithLogitsLoss)
+
 
 @LOSS.register_module()
 class SmoothCrossEntropy(torch.nn.Module):
-    def __init__(self, label_smoothing=0.2, 
-                 ignore_index=None, 
-                 num_classes=None, 
-                 weight=None, 
-                 return_valid=False
-                 ):
+    def __init__(
+        self,
+        label_smoothing=0.2,
+        ignore_index=None,
+        num_classes=None,
+        weight=None,
+        return_valid=False,
+    ):
         super(SmoothCrossEntropy, self).__init__()
         self.label_smoothing = label_smoothing
         self.ignore_index = ignore_index
@@ -23,32 +26,39 @@ class SmoothCrossEntropy(torch.nn.Module):
         # Reduce label values in the range of logit shape
         if ignore_index is not None:
             reducing_list = torch.range(0, num_classes).long().cuda(non_blocking=True)
-            inserted_value = torch.zeros((1, )).long().cuda(non_blocking=True)
-            self.reducing_list = torch.cat([
-                reducing_list[:ignore_index], inserted_value,
-                reducing_list[ignore_index:]
-            ], 0)
+            inserted_value = torch.zeros((1,)).long().cuda(non_blocking=True)
+            self.reducing_list = torch.cat(
+                [
+                    reducing_list[:ignore_index],
+                    inserted_value,
+                    reducing_list[ignore_index:],
+                ],
+                0,
+            )
         if weight is not None:
-            self.weight = torch.from_numpy(weight).float().cuda(
-                non_blocking=True).squeeze()
+            self.weight = (
+                torch.from_numpy(weight).float().cuda(non_blocking=True).squeeze()
+            )
         else:
             self.weight = None
-            
+
     def forward(self, pred, gt):
-        if len(pred.shape)>2:
+        if len(pred.shape) > 2:
             pred = pred.transpose(1, 2).reshape(-1, pred.shape[1])
         gt = gt.contiguous().view(-1)
-        
-        if self.ignore_index is not None: 
+
+        if self.ignore_index is not None:
             valid_idx = gt != self.ignore_index
             pred = pred[valid_idx, :]
-            gt = gt[valid_idx]        
+            gt = gt[valid_idx]
             gt = torch.gather(self.reducing_list, 0, gt)
-            
+
         if self.label_smoothing > 0:
             n_class = pred.size(1)
             one_hot = torch.zeros_like(pred).scatter(1, gt.view(-1, 1), 1)
-            one_hot = one_hot * (1 - self.label_smoothing) + (1 - one_hot) * self.label_smoothing / (n_class - 1)
+            one_hot = one_hot * (1 - self.label_smoothing) + (
+                1 - one_hot
+            ) * self.label_smoothing / (n_class - 1)
             log_prb = F.log_softmax(pred, dim=1)
             if self.weight is not None:
                 loss = -(one_hot * log_prb * self.weight).sum(dim=1).mean()
@@ -56,7 +66,7 @@ class SmoothCrossEntropy(torch.nn.Module):
                 loss = -(one_hot * log_prb).sum(dim=1).mean()
         else:
             loss = F.cross_entropy(pred, gt, weight=self.weight)
-        
+
         if self.return_valid:
             return loss, pred, gt
         else:
@@ -68,7 +78,7 @@ class MaskedCrossEntropy(torch.nn.Module):
     def __init__(self, label_smoothing=0.2):
         super(MaskedCrossEntropy, self).__init__()
         self.creterion = CrossEntropyLoss(label_smoothing=label_smoothing)
-        
+
     def forward(self, logit, target, mask):
         logit = logit.transpose(1, 2).reshape(-1, logit.shape[1])
         target = target.flatten()
@@ -77,19 +87,23 @@ class MaskedCrossEntropy(torch.nn.Module):
         loss = self.creterion(logit[idx], target[idx])
         return loss
 
+
 @LOSS.register_module()
 class BCELogits(torch.nn.Module):
     def __init__(self, **kwargs):
         super().__init__()
         self.criterion = BCEWithLogitsLoss(**kwargs)
-        
+
     def forward(self, logits, targets):
-        if len(logits.shape)>2:
+        if len(logits.shape) > 2:
             logits = logits.transpose(1, 2).reshape(-1, logits.shape[1])
         targets = targets.contiguous().view(-1)
         num_clsses = logits.shape[-1]
-        targets_onehot = F.one_hot(targets, num_classes=num_clsses).to(device=logits.device,dtype=logits.dtype)
+        targets_onehot = F.one_hot(targets, num_classes=num_clsses).to(
+            device=logits.device, dtype=logits.dtype
+        )
         return self.criterion(logits, targets_onehot)
+
 
 @LOSS.register_module()
 class FocalLoss(torch.nn.Module):
@@ -97,8 +111,10 @@ class FocalLoss(torch.nn.Module):
         super(FocalLoss, self).__init__()
         self.gamma = gamma
         self.alpha = alpha
-        if isinstance(alpha, (float, int)): self.alpha = torch.Tensor([alpha, 1 - alpha])
-        if isinstance(alpha, list): self.alpha = torch.Tensor(alpha)
+        if isinstance(alpha, (float, int)):
+            self.alpha = torch.Tensor([alpha, 1 - alpha])
+        if isinstance(alpha, list):
+            self.alpha = torch.Tensor(alpha)
         self.size_average = size_average
 
     def forward(self, logit, target):
@@ -126,15 +142,15 @@ class FocalLoss(torch.nn.Module):
             return loss.sum()
 
 
-
-
 @LOSS.register_module()
 class Poly1CrossEntropyLoss(torch.nn.Module):
-    def __init__(self,
-                 num_classes: int =50,
-                 epsilon: float = 1.0,
-                 reduction: str = "mean",
-                 weight: torch.Tensor = None):
+    def __init__(
+        self,
+        num_classes: int = 50,
+        epsilon: float = 1.0,
+        reduction: str = "mean",
+        weight: torch.Tensor = None,
+    ):
         """
         Create instance of Poly1CrossEntropyLoss
         :param num_classes:
@@ -156,17 +172,17 @@ class Poly1CrossEntropyLoss(torch.nn.Module):
         :param labels: tensor of shape [N]
         :return: poly cross-entropy loss
         """
-        if len(logits.shape)>2:
+        if len(logits.shape) > 2:
             logits = logits.transpose(1, 2).reshape(-1, logits.shape[1])
         labels = labels.contiguous().view(-1)
 
-        labels_onehot = F.one_hot(labels, num_classes=self.num_classes).to(device=logits.device,
-                                                                           dtype=logits.dtype)
+        labels_onehot = F.one_hot(labels, num_classes=self.num_classes).to(
+            device=logits.device, dtype=logits.dtype
+        )
         pt = torch.sum(labels_onehot * F.softmax(logits, dim=-1), dim=-1)
-        CE = F.cross_entropy(input=logits,
-                             target=labels,
-                             reduction='none',
-                             weight=self.weight)
+        CE = F.cross_entropy(
+            input=logits, target=labels, reduction="none", weight=self.weight
+        )
         poly1 = CE + self.epsilon * (1 - pt)
         if self.reduction == "mean":
             poly1 = poly1.mean()
@@ -177,16 +193,17 @@ class Poly1CrossEntropyLoss(torch.nn.Module):
 
 @LOSS.register_module()
 class Poly1FocalLoss(torch.nn.Module):
-    def __init__(self,
-                 epsilon: float = 1.0,
-                 alpha: float = 0.25,
-                 gamma: float = 2.0,
-                 reduction: str = "mean",
-                 weight: torch.Tensor = None,
-                 pos_weight: torch.Tensor = None,
-                 label_is_onehot: bool = False, 
-                 **kwargs
-                 ):
+    def __init__(
+        self,
+        epsilon: float = 1.0,
+        alpha: float = 0.25,
+        gamma: float = 2.0,
+        reduction: str = "mean",
+        weight: torch.Tensor = None,
+        pos_weight: torch.Tensor = None,
+        label_is_onehot: bool = False,
+        **kwargs,
+    ):
         """
         Create instance of Poly1FocalLoss
         :param num_classes: number of classes
@@ -229,14 +246,20 @@ class Poly1FocalLoss(torch.nn.Module):
             # if labels are of shape [N, ...] e.g. segmentation task
             # convert to one-hot tensor of shape [N, num_classes, ...]
             else:
-                labels = F.one_hot(labels.unsqueeze(1), num_classes).transpose(1, -1).squeeze_(-1)
+                labels = (
+                    F.one_hot(labels.unsqueeze(1), num_classes)
+                    .transpose(1, -1)
+                    .squeeze_(-1)
+                )
 
         labels = labels.to(device=logits.device, dtype=logits.dtype)
-        ce_loss = F.binary_cross_entropy_with_logits(input=logits,
-                                                     target=labels,
-                                                     reduction="none",
-                                                     weight=self.weight,
-                                                     pos_weight=self.pos_weight)
+        ce_loss = F.binary_cross_entropy_with_logits(
+            input=logits,
+            target=labels,
+            reduction="none",
+            weight=self.weight,
+            pos_weight=self.pos_weight,
+        )
         pt = labels * p + (1 - labels) * (1 - p)
         FL = ce_loss * ((1 - pt) ** self.gamma)
 
@@ -252,6 +275,7 @@ class Poly1FocalLoss(torch.nn.Module):
             poly1 = poly1.sum()
 
         return poly1
+
 
 @LOSS.register_module()
 class MultiShapeCrossEntropy(torch.nn.Module):
@@ -270,11 +294,12 @@ class MultiShapeCrossEntropy(torch.nn.Module):
             losses += loss
         return losses / batch_size
 
+
 def build_criterion_from_cfg(cfg, **kwargs):
     """
     Build a criterion (loss function), defined by cfg.NAME.
     Args:
-        cfg (eDICT): 
+        cfg (eDICT):
     Returns:
         criterion: a constructed loss function specified by cfg.NAME
     """

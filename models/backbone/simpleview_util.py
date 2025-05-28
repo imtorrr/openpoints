@@ -1,9 +1,9 @@
-import torch.nn as nn
 import numpy as np
 import torch
 
 RESOLUTION = 128
 TRANS = -1.4
+
 
 def euler2mat(angle):
     """Convert euler angles to rotation matrix.
@@ -32,25 +32,25 @@ def euler2mat(angle):
 
     # zero = torch.zeros([b], requires_grad=False, device=angle.device)[0]
     # one = torch.ones([b], requires_grad=False, device=angle.device)[0]
-    zero = z.detach()*0
-    one = zero.detach()+1
-    zmat = torch.stack([cosz, -sinz, zero,
-                        sinz, cosz, zero,
-                        zero, zero, one], dim=_dim).reshape(_view)
+    zero = z.detach() * 0
+    one = zero.detach() + 1
+    zmat = torch.stack(
+        [cosz, -sinz, zero, sinz, cosz, zero, zero, zero, one], dim=_dim
+    ).reshape(_view)
 
     cosy = torch.cos(y)
     siny = torch.sin(y)
 
-    ymat = torch.stack([cosy, zero, siny,
-                        zero, one, zero,
-                        -siny, zero, cosy], dim=_dim).reshape(_view)
+    ymat = torch.stack(
+        [cosy, zero, siny, zero, one, zero, -siny, zero, cosy], dim=_dim
+    ).reshape(_view)
 
     cosx = torch.cos(x)
     sinx = torch.sin(x)
 
-    xmat = torch.stack([one, zero, zero,
-                        zero, cosx, -sinx,
-                        zero, sinx, cosx], dim=_dim).reshape(_view)
+    xmat = torch.stack(
+        [one, zero, zero, zero, cosx, -sinx, zero, sinx, cosx], dim=_dim
+    ).reshape(_view)
 
     rot_mat = xmat @ ymat @ zmat
     # print(rot_mat)
@@ -75,62 +75,83 @@ def distribute(depth, _x, _y, size_x, size_y, image_height, image_width):
     assert size_y % 2 == 0 or size_y == 1
     batch, _ = depth.size()
     epsilon = torch.tensor([1e-12], requires_grad=False, device=depth.device)
-    _i = torch.linspace(-size_x / 2, (size_x / 2) - 1, size_x, requires_grad=False, device=depth.device)
-    _j = torch.linspace(-size_y / 2, (size_y / 2) - 1, size_y, requires_grad=False, device=depth.device)
+    _i = torch.linspace(
+        -size_x / 2, (size_x / 2) - 1, size_x, requires_grad=False, device=depth.device
+    )
+    _j = torch.linspace(
+        -size_y / 2, (size_y / 2) - 1, size_y, requires_grad=False, device=depth.device
+    )
 
-    extended_x = _x.unsqueeze(2).repeat([1, 1, size_x]) + _i  # [batch, num_points, size_x]
-    extended_y = _y.unsqueeze(2).repeat([1, 1, size_y]) + _j  # [batch, num_points, size_y]
+    extended_x = (
+        _x.unsqueeze(2).repeat([1, 1, size_x]) + _i
+    )  # [batch, num_points, size_x]
+    extended_y = (
+        _y.unsqueeze(2).repeat([1, 1, size_y]) + _j
+    )  # [batch, num_points, size_y]
 
-    extended_x = extended_x.unsqueeze(3).repeat([1, 1, 1, size_y])  # [batch, num_points, size_x, size_y]
-    extended_y = extended_y.unsqueeze(2).repeat([1, 1, size_x, 1])  # [batch, num_points, size_x, size_y]
+    extended_x = extended_x.unsqueeze(3).repeat(
+        [1, 1, 1, size_y]
+    )  # [batch, num_points, size_x, size_y]
+    extended_y = extended_y.unsqueeze(2).repeat(
+        [1, 1, size_x, 1]
+    )  # [batch, num_points, size_x, size_y]
 
     extended_x.ceil_()
     extended_y.ceil_()
 
-    value = depth.unsqueeze(2).unsqueeze(3).repeat([1, 1, size_x, size_y])  # [batch, num_points, size_x, size_y]
+    value = (
+        depth.unsqueeze(2).unsqueeze(3).repeat([1, 1, size_x, size_y])
+    )  # [batch, num_points, size_x, size_y]
 
     # all points that will be finally used
-    masked_points = ((extended_x >= 0)
-                     * (extended_x <= image_height - 1)
-                     * (extended_y >= 0)
-                     * (extended_y <= image_width - 1)
-                     * (value >= 0))
+    masked_points = (
+        (extended_x >= 0)
+        * (extended_x <= image_height - 1)
+        * (extended_y >= 0)
+        * (extended_y <= image_width - 1)
+        * (value >= 0)
+    )
 
     true_extended_x = extended_x
     true_extended_y = extended_y
 
     # to prevent error
-    extended_x = (extended_x % image_height)
-    extended_y = (extended_y % image_width)
+    extended_x = extended_x % image_height
+    extended_y = extended_y % image_width
 
     # [batch, num_points, size_x, size_y]
-    distance = torch.abs((extended_x - _x.unsqueeze(2).unsqueeze(3))
-                         * (extended_y - _y.unsqueeze(2).unsqueeze(3)))
-    weight = (masked_points.float()
-          * (1 / (value + epsilon)))  # [batch, num_points, size_x, size_y]
+    distance = torch.abs(
+        (extended_x - _x.unsqueeze(2).unsqueeze(3))
+        * (extended_y - _y.unsqueeze(2).unsqueeze(3))
+    )
+    weight = masked_points.float() * (
+        1 / (value + epsilon)
+    )  # [batch, num_points, size_x, size_y]
     weighted_value = value * weight
 
     weight = weight.view([batch, -1])
     weighted_value = weighted_value.view([batch, -1])
 
     coordinates = (extended_x.view([batch, -1]) * image_width) + extended_y.view(
-        [batch, -1])
+        [batch, -1]
+    )
     coord_max = image_height * image_width
-    true_coordinates = (true_extended_x.view([batch, -1]) * image_width) + true_extended_y.view(
-        [batch, -1])
+    true_coordinates = (
+        true_extended_x.view([batch, -1]) * image_width
+    ) + true_extended_y.view([batch, -1])
     true_coordinates[~masked_points.view([batch, -1])] = coord_max
     weight_scattered = torch.zeros(
-        [batch, image_width * image_height],
-        device=depth.device).scatter_add(1, coordinates.long(), weight)
+        [batch, image_width * image_height], device=depth.device
+    ).scatter_add(1, coordinates.long(), weight)
 
-    masked_zero_weight_scattered = (weight_scattered == 0.0)
+    masked_zero_weight_scattered = weight_scattered == 0.0
     weight_scattered += masked_zero_weight_scattered.float()
 
     weighed_value_scattered = torch.zeros(
-        [batch, image_width * image_height],
-        device=depth.device).scatter_add(1, coordinates.long(), weighted_value)
+        [batch, image_width * image_height], device=depth.device
+    ).scatter_add(1, coordinates.long(), weighted_value)
 
-    return weighed_value_scattered,  weight_scattered
+    return weighed_value_scattered, weight_scattered
 
 
 def points2depth(points, image_height, image_width, size_x=4, size_y=4):
@@ -146,8 +167,10 @@ def points2depth(points, image_height, image_width, size_x=4, size_y=4):
 
     epsilon = torch.tensor([1e-12], requires_grad=False, device=points.device)
     # epsilon not needed, kept here to ensure exact replication of old version
-    coord_x = (points[:, :, 0] / (points[:, :, 2] + epsilon)) * (image_width / image_height)  # [batch, num_points]
-    coord_y = (points[:, :, 1] / (points[:, :, 2] + epsilon))  # [batch, num_points]
+    coord_x = (points[:, :, 0] / (points[:, :, 2] + epsilon)) * (
+        image_width / image_height
+    )  # [batch, num_points]
+    coord_y = points[:, :, 1] / (points[:, :, 2] + epsilon)  # [batch, num_points]
 
     batch, total_points, _ = points.size()
     depth = points[:, :, 2]  # [batch, num_points]
@@ -162,11 +185,12 @@ def points2depth(points, image_height, image_width, size_x=4, size_y=4):
         size_x=size_x,
         size_y=size_y,
         image_height=image_height,
-        image_width=image_width)
+        image_width=image_width,
+    )
 
-    depth_recovered = (weighed_value_scattered / weight_scattered).view([
-        batch, image_height, image_width
-    ])
+    depth_recovered = (weighed_value_scattered / weight_scattered).view(
+        [batch, image_height, image_width]
+    )
 
     return depth_recovered
 
@@ -178,8 +202,7 @@ def batched_index_select(inp, dim, index):
     dim: 0 < scalar
     index: B x M
     """
-    views = [inp.shape[0]] + \
-        [1 if i != dim else -1 for i in range(1, len(inp.shape))]
+    views = [inp.shape[0]] + [1 if i != dim else -1 for i in range(1, len(inp.shape))]
     expanse = list(inp.shape)
     expanse[0] = -1
     expanse[dim] = -1
@@ -205,7 +228,9 @@ def point_fea_img_fea(point_fea, point_coo, h, w):
 
     bs, _, fs = point_fea.shape
     point_coo = point_coo.unsqueeze(2).repeat([1, 1, fs])
-    img_fea = torch.zeros([bs, h * w, fs], device=point_fea.device).scatter_add(1, point_coo.long(), point_fea)
+    img_fea = torch.zeros([bs, h * w, fs], device=point_fea.device).scatter_add(
+        1, point_coo.long(), point_fea
+    )
 
     return img_fea
 
@@ -218,16 +243,13 @@ def distribute_img_fea_points(img_fea, point_coord):
         point_fea: [B, num_points, C], for points with coordinates outside the image, we return 0
     """
     B, C, H, W = list(img_fea.size())
-    img_fea = img_fea.permute(0, 2, 3, 1).view([B, H*W, C])
+    img_fea = img_fea.permute(0, 2, 3, 1).view([B, H * W, C])
 
     coord_max = ((H - 1) * W) + (W - 1)
     mask_point_coord = (point_coord >= 0) * (point_coord <= coord_max)
     mask_point_coord = mask_point_coord.float()
     point_coord = mask_point_coord * point_coord
-    point_fea = batched_index_select(
-        inp=img_fea,
-        dim=1,
-        index=point_coord.long())
+    point_fea = batched_index_select(inp=img_fea, dim=1, index=point_coord.long())
     point_fea = mask_point_coord.unsqueeze(-1) * point_fea
     return point_fea
 
@@ -238,13 +260,16 @@ class PCViews:
     """
 
     def __init__(self):
-        _views = np.asarray([
-            [[0 * np.pi / 2, 0, np.pi / 2], [0, 0, TRANS]],
-            [[1 * np.pi / 2, 0, np.pi / 2], [0, 0, TRANS]],
-            [[2 * np.pi / 2, 0, np.pi / 2], [0, 0, TRANS]],
-            [[3 * np.pi / 2, 0, np.pi / 2], [0, 0, TRANS]],
-            [[0, -np.pi / 2, np.pi / 2], [0, 0, TRANS]],
-            [[0, np.pi / 2, np.pi / 2], [0, 0, TRANS]]])
+        _views = np.asarray(
+            [
+                [[0 * np.pi / 2, 0, np.pi / 2], [0, 0, TRANS]],
+                [[1 * np.pi / 2, 0, np.pi / 2], [0, 0, TRANS]],
+                [[2 * np.pi / 2, 0, np.pi / 2], [0, 0, TRANS]],
+                [[3 * np.pi / 2, 0, np.pi / 2], [0, 0, TRANS]],
+                [[0, -np.pi / 2, np.pi / 2], [0, 0, TRANS]],
+                [[0, np.pi / 2, np.pi / 2], [0, 0, TRANS]],
+            ]
+        )
         self.num_views = 6
         angle = torch.tensor(_views[:, 0, :]).float().cuda()
         self.rot_mat = euler2mat(angle).transpose(1, 2)
@@ -266,7 +291,8 @@ class PCViews:
         _points = self.point_transform(
             points=torch.repeat_interleave(points, v, dim=0),
             rot_mat=self.rot_mat.repeat(b, 1, 1),
-            translation=self.translation.repeat(b, 1, 1))
+            translation=self.translation.repeat(b, 1, 1),
+        )
 
         img = points2depth(
             points=_points,

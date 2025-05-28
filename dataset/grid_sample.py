@@ -13,9 +13,19 @@ def grid_subsampling(points, features=None, labels=None, sampleDl=0.1, verbose=0
     """
     if (features is None) and (labels is None):
         return cpp_subsampling.compute(points, sampleDl=sampleDl, verbose=verbose)
-    elif (labels is None):
-        return cpp_subsampling.compute(points, features=features, sampleDl=sampleDl, verbose=verbose)
-    elif (features is None):
-        return cpp_subsampling.compute(points, classes=labels, sampleDl=sampleDl, verbose=verbose)
+    elif labels is None:
+        return cpp_subsampling.compute(
+            points, features=features, sampleDl=sampleDl, verbose=verbose
+        )
+    elif features is None:
+        return cpp_subsampling.compute(
+            points, classes=labels, sampleDl=sampleDl, verbose=verbose
+        )
     else:
-        return cpp_subsampling.compute(points, features=features, classes=labels, sampleDl=sampleDl, verbose=verbose)
+        return cpp_subsampling.compute(
+            points,
+            features=features,
+            classes=labels,
+            sampleDl=sampleDl,
+            verbose=verbose,
+        )

@@ -6,48 +6,56 @@
 Reference:
 https://github.com/sshaoshuai/Pointnet2.PyTorch
 """
+
 from typing import List, Optional
 
 import torch
 import torch.nn as nn
 import logging
-from ..layers import furthest_point_sample, random_sample,  LocalAggregation, three_interpolation, create_convblock1d # grid_subsampling,
+from ..layers import (
+    furthest_point_sample,
+    random_sample,
+    LocalAggregation,
+    three_interpolation,
+    create_convblock1d,
+)  # grid_subsampling,
 from ..build import MODELS
 
 
 class PointNetSAModuleMSG(nn.Module):
     """Original PointNet set abstraction layer with multi-scale grouping in parallel fashion
-        PointNet++ Set Abstraction Module:
-        1. For each module, downsample the point cloud ( support set) once as query set
-        2. For each downsampled point cloud, query neighbors from the support set multiple times
-        3. In each neighbor querying, perform local aggregations
+    PointNet++ Set Abstraction Module:
+    1. For each module, downsample the point cloud ( support set) once as query set
+    2. For each downsampled point cloud, query neighbors from the support set multiple times
+    3. In each neighbor querying, perform local aggregations
     """
 
-    def __init__(self,
-                 stride: int,
-                 radii: List[float],
-                 nsamples: List[int],
-                 channel_list: List[List[int]],
-                 aggr_args: dict,
-                 group_args: dict,
-                 conv_args: dict,
-                 norm_args: dict,
-                 act_args: dict,
-                 sampler='fps',
-                 use_res=False,
-                 query_as_support=False,
-                 voxel_size=0.1,
-                 **kwargs
-                 ):
+    def __init__(
+        self,
+        stride: int,
+        radii: List[float],
+        nsamples: List[int],
+        channel_list: List[List[int]],
+        aggr_args: dict,
+        group_args: dict,
+        conv_args: dict,
+        norm_args: dict,
+        act_args: dict,
+        sampler="fps",
+        use_res=False,
+        query_as_support=False,
+        voxel_size=0.1,
+        **kwargs,
+    ):
         super().__init__()
         self.stride = stride
         self.blocks = len(channel_list)
-        self.query_as_support=query_as_support
+        self.query_as_support = query_as_support
 
         # build the sampling layer:
-        if 'fps' in sampler.lower() or 'furthest' in sampler.lower():
+        if "fps" in sampler.lower() or "furthest" in sampler.lower():
             self.sample_fn = furthest_point_sample
-        elif 'random' in sampler.lower():
+        elif "random" in sampler.lower():
             self.sample_fn = random_sample
 
         # holder for the grouper and convs (MLPs, \etc)
@@ -57,19 +65,29 @@ class PointNetSAModuleMSG(nn.Module):
             nsample = nsamples[i]
             channels = channel_list[i]
             if i > 0 and query_as_support:
-                channels[0] = channel_list[i-1][-1]
+                channels[0] = channel_list[i - 1][-1]
 
             group_args.radius = radius
             group_args.nsample = nsample
             # build the convs
             self.local_aggregations.append(
-                LocalAggregation(channels, aggr_args, conv_args, norm_args, act_args,
-                                 group_args, use_res))
+                LocalAggregation(
+                    channels,
+                    aggr_args,
+                    conv_args,
+                    norm_args,
+                    act_args,
+                    group_args,
+                    use_res,
+                )
+            )
 
-    def forward(self,
-                support_xyz: torch.Tensor,
-                support_features: torch.Tensor = None,
-                query_xyz=None):
+    def forward(
+        self,
+        support_xyz: torch.Tensor,
+        support_features: torch.Tensor = None,
+        query_xyz=None,
+    ):
         """
         :param support_xyz: (B, N, 3) tensor of the xyz coordinates of the features
         :param support_features: (B, C, N) tensor of the descriptors of the the features
@@ -81,16 +99,19 @@ class PointNetSAModuleMSG(nn.Module):
         new_features_list = []
         if query_xyz is None and self.stride > 1:
             idx = self.sample_fn(
-                support_xyz, support_xyz.shape[1] // self.stride).long()
+                support_xyz, support_xyz.shape[1] // self.stride
+            ).long()
             query_xyz = torch.gather(
-                support_xyz, 1, idx.unsqueeze(-1).expand(-1, -1, 3))
+                support_xyz, 1, idx.unsqueeze(-1).expand(-1, -1, 3)
+            )
         else:
             query_xyz = support_xyz
             idx = None
 
         for i in range(self.blocks):
             new_features = self.local_aggregations[i](
-                query_xyz, support_xyz, support_features, query_idx=idx)
+                query_xyz, support_xyz, support_features, query_idx=idx
+            )
             new_features_list.append(new_features)
 
             if self.query_as_support:
@@ -104,10 +125,12 @@ class PointNetFPModule(nn.Module):
     r"""Feature Propagation module in PointNet++.
     Propagates the features of one set to another"""
 
-    def __init__(self, mlp: List[int],
-                 norm_args={'norm': 'bn1d'},
-                 act_args={'act': 'relu'},
-                 ):
+    def __init__(
+        self,
+        mlp: List[int],
+        norm_args={"norm": "bn1d"},
+        act_args={"act": "relu"},
+    ):
         """
         :param mlp: list of channel sizes
         """
@@ -115,13 +138,22 @@ class PointNetFPModule(nn.Module):
         # Local Aggregations or Not
         convs = []
         for i in range(len(mlp) - 1):
-            convs.append(create_convblock1d(mlp[i], mlp[i + 1],
-                                            norm_args=norm_args, act_args=act_args,
-                                            ))
+            convs.append(
+                create_convblock1d(
+                    mlp[i],
+                    mlp[i + 1],
+                    norm_args=norm_args,
+                    act_args=act_args,
+                )
+            )
         self.convs = nn.Sequential(*convs)
 
     def forward(
-            self, unknown: torch.Tensor, known: torch.Tensor, unknow_feats: torch.Tensor, known_feats: torch.Tensor
+        self,
+        unknown: torch.Tensor,
+        known: torch.Tensor,
+        unknow_feats: torch.Tensor,
+        known_feats: torch.Tensor,
     ) -> torch.Tensor:
         """
         :param unknown: (B, n, 3) tensor of the xyz positions of the unknown features. To upsample!!!
@@ -132,14 +164,15 @@ class PointNetFPModule(nn.Module):
             new_features: (B, mlp[-1], n) tensor of the features of the unknown features
         """
         if known is not None:
-            interpolated_feats = three_interpolation(
-                unknown, known, known_feats)
+            interpolated_feats = three_interpolation(unknown, known, known_feats)
         else:
             interpolated_feats = known_feats.expand(
-                *known_feats.size()[0:2], unknown.size(1))
+                *known_feats.size()[0:2], unknown.size(1)
+            )
         if unknow_feats is not None:
             new_features = torch.cat(
-                [unknow_feats, interpolated_feats], dim=1)  # (B, C2 + C1, n)
+                [unknow_feats, interpolated_feats], dim=1
+            )  # (B, C2 + C1, n)
         else:
             new_features = interpolated_feats
         new_features = self.convs(new_features)
@@ -174,50 +207,53 @@ class PointNet2Encoder(nn.Module):
         double_last_channel (bool, optional): whether double the channel sizes of the last layer inside each block. Defaults to False. Set to False in ASSANet
         query_as_support (bool, optional): whether to use query set as support set. Defaults to False. Set to True in ASSANet
     """
-    def __init__(self,
-                 in_channels: int,
-                 radius: List[float] or float,
-                 num_samples: List[int] or int,
-                 aggr_args: dict,
-                 group_args: dict,
-                 conv_args: dict,
-                 norm_args: dict,
-                 act_args: dict,
-                 blocks: Optional[List] = None,
-                 mlps=None,
-                 width: Optional[int] = None,
-                 strides: List[int] = [4, 4, 4, 4],
-                 layers: int = 3,
-                 width_scaling: int = 2,
-                 radius_scaling: int = 2,
-                 block_radius_scaling: int = 1,
-                 nsample_scaling: int = 1,
-                 sampler: str = 'fps',
-                 use_res=False,
-                 stem_conv=False,
-                 stem_aggr=False,
-                 double_last_channel=True,
-                 query_as_support=False,
-                 **kwargs
-                 ):
+
+    def __init__(
+        self,
+        in_channels: int,
+        radius: List[float] or float,
+        num_samples: List[int] or int,
+        aggr_args: dict,
+        group_args: dict,
+        conv_args: dict,
+        norm_args: dict,
+        act_args: dict,
+        blocks: Optional[List] = None,
+        mlps=None,
+        width: Optional[int] = None,
+        strides: List[int] = [4, 4, 4, 4],
+        layers: int = 3,
+        width_scaling: int = 2,
+        radius_scaling: int = 2,
+        block_radius_scaling: int = 1,
+        nsample_scaling: int = 1,
+        sampler: str = "fps",
+        use_res=False,
+        stem_conv=False,
+        stem_aggr=False,
+        double_last_channel=True,
+        query_as_support=False,
+        **kwargs,
+    ):
         super().__init__()
         if kwargs:
-            logging.warning(
-                f"kwargs: {kwargs} are not used in {__class__.__name__}")
+            logging.warning(f"kwargs: {kwargs} are not used in {__class__.__name__}")
         stages = len(strides)
         self.strides = strides
         self.blocks = blocks if mlps is None else [len(mlp) for mlp in mlps]
-        radius = self._to_full_list(radius,
-                                    blocks=self.blocks,
-                                    param_scaling=radius_scaling,
-                                    block_param_scaling=block_radius_scaling)
-        num_samples = self._to_full_list(num_samples,
-                                         blocks=self.blocks,
-                                         param_scaling=nsample_scaling)
+        radius = self._to_full_list(
+            radius,
+            blocks=self.blocks,
+            param_scaling=radius_scaling,
+            block_param_scaling=block_radius_scaling,
+        )
+        num_samples = self._to_full_list(
+            num_samples, blocks=self.blocks, param_scaling=nsample_scaling
+        )
         self.radius = radius
         self.num_samples = num_samples
-        logging.info(f'radius is modified to {radius}')
-        logging.info(f'num_samples is modified to {num_samples}')
+        logging.info(f"radius is modified to {radius}")
+        logging.info(f"num_samples is modified to {num_samples}")
 
         # patchify stem
         self.stem_conv = stem_conv
@@ -225,13 +261,21 @@ class PointNet2Encoder(nn.Module):
         if stem_conv:
             width = width if width is not None else mlps[0][0][0]
             self.conv1 = create_convblock1d(
-                in_channels, width, norm_args=None, act_args=None)
+                in_channels, width, norm_args=None, act_args=None
+            )
             if stem_aggr:
                 channels = [width] * (layers + 1)
                 group_args.radius = radius[0][0]
                 group_args.nsample = num_samples[0][0]
-                self.stem = LocalAggregation(channels, aggr_args, conv_args, norm_args, act_args,
-                                             group_args, use_res)
+                self.stem = LocalAggregation(
+                    channels,
+                    aggr_args,
+                    conv_args,
+                    norm_args,
+                    act_args,
+                    group_args,
+                    use_res,
+                )
             in_channels = width
 
         if mlps is None:
@@ -247,10 +291,9 @@ class PointNet2Encoder(nn.Module):
                     mlps_temp = [width] * (layers - 1)
                     width = width * width_scaling if strides[i] > 1 else width
                     mlps_temp += [width]
-                    mlps.append([mlps_temp] + [[width] * layers]
-                                * (self.blocks[i] - 1))
+                    mlps.append([mlps_temp] + [[width] * layers] * (self.blocks[i] - 1))
 
-            logging.info(f'channels is modified to {mlps}')
+            logging.info(f"channels is modified to {mlps}")
         self.mlps = mlps
 
         self.SA_modules = nn.ModuleList()
@@ -277,7 +320,7 @@ class PointNet2Encoder(nn.Module):
                     act_args=act_args,
                     sampler=sampler,
                     use_res=use_res,
-                    query_as_support=query_as_support
+                    query_as_support=query_as_support,
                 )
             )
             skip_channel_list.append(channel_out)
@@ -301,13 +344,14 @@ class PointNet2Encoder(nn.Module):
                     param_list.append([param] * blocks[i])
                 else:
                     param_list.append(
-                        [param] + [param * block_param_scaling] * (blocks[i] - 1))
+                        [param] + [param * block_param_scaling] * (blocks[i] - 1)
+                    )
                     param *= param_scaling
         return param_list
 
     def forward_cls_feat(self, xyz, features=None):
-        if hasattr(xyz, 'keys'):
-            xyz, features = xyz['pos'], xyz['x']
+        if hasattr(xyz, "keys"):
+            xyz, features = xyz["pos"], xyz["x"]
         if features is None:
             features = xyz.clone().transpose(1, 2).contiguous()
         if self.stem_conv:
@@ -320,8 +364,8 @@ class PointNet2Encoder(nn.Module):
         return features.squeeze(-1)
 
     def forward_seg_feat(self, xyz, features=None):
-        if hasattr(xyz, 'keys'):
-            xyz, features = xyz['pos'], xyz['x']
+        if hasattr(xyz, "keys"):
+            xyz, features = xyz["pos"], xyz["x"]
         if features is None:
             features = xyz.clone().transpose(1, 2).contiguous()
         xyz = xyz.contiguous()
@@ -339,36 +383,35 @@ class PointNet2Encoder(nn.Module):
         return l_xyz, l_features
 
     def forward(self, xyz, features=None):
-        if hasattr(xyz, 'keys'):
-            xyz, features = xyz['pos'], xyz['x']
+        if hasattr(xyz, "keys"):
+            xyz, features = xyz["pos"], xyz["x"]
         return self.forward_seg_feat(xyz, features)
 
 
 @MODELS.register_module()
 class PointNet2Decoder(nn.Module):
-    """Decoder for PointNet++
-    """
-    def __init__(self,
-                 encoder_channel_list: List[int],
-                 mlps=None,
-                 fp_mlps=None,
-                 decoder_layers=1,
-                 **kwargs
-                 ):
+    """Decoder for PointNet++"""
+
+    def __init__(
+        self,
+        encoder_channel_list: List[int],
+        mlps=None,
+        fp_mlps=None,
+        decoder_layers=1,
+        **kwargs,
+    ):
         super().__init__()
         skip_channel_list = encoder_channel_list
         self.FP_modules = nn.ModuleList()
         if fp_mlps is None:
             fp_mlps = [[mlps[0][0][0]] * (decoder_layers + 1)]
-            fp_mlps += [[c] * (decoder_layers + 1)
-                        for c in skip_channel_list[1:-1]]
+            fp_mlps += [[c] * (decoder_layers + 1) for c in skip_channel_list[1:-1]]
         for k in range(fp_mlps.__len__()):
-            pre_channel = fp_mlps[k + 1][-1] if k + 1 < len(fp_mlps)\
-                else skip_channel_list[-1]
+            pre_channel = (
+                fp_mlps[k + 1][-1] if k + 1 < len(fp_mlps) else skip_channel_list[-1]
+            )
             self.FP_modules.append(
-                PointNetFPModule(
-                    [pre_channel + skip_channel_list[k]] + fp_mlps[k]
-                )
+                PointNetFPModule([pre_channel + skip_channel_list[k]] + fp_mlps[k])
             )
         self.out_channels = fp_mlps[0][-1]
 
@@ -382,44 +425,44 @@ class PointNet2Decoder(nn.Module):
 
 @MODELS.register_module()
 class PointNet2PartDecoder(nn.Module):
-    """PointNet++ MSG.
-    """
-    def __init__(self,
-                 in_channels: int,
-                 radius: List[int] or int,
-                 num_samples: List[int],
-                 group_args: dict,
-                 conv_args: dict,
-                 norm_args: dict,
-                 act_args: dict,
-                 mlps=None,
-                 blocks: Optional[List] = None,
-                 width: Optional[int] = None,
-                 strides=[4, 4, 4, 4],
-                 layers=3,
-                 fp_mlps=None,
-                 decoder_layers=1,
-                 decocder_aggr_args=None,
-                 width_scaling=2,
-                 radius_scaling=2,
-                 nsample_scaling=1,
-                 use_res=False,
-                 stem_conv=False,
-                 double_last_channel=False,
-                 **kwargs
-                 ):
+    """PointNet++ MSG."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        radius: List[int] or int,
+        num_samples: List[int],
+        group_args: dict,
+        conv_args: dict,
+        norm_args: dict,
+        act_args: dict,
+        mlps=None,
+        blocks: Optional[List] = None,
+        width: Optional[int] = None,
+        strides=[4, 4, 4, 4],
+        layers=3,
+        fp_mlps=None,
+        decoder_layers=1,
+        decocder_aggr_args=None,
+        width_scaling=2,
+        radius_scaling=2,
+        nsample_scaling=1,
+        use_res=False,
+        stem_conv=False,
+        double_last_channel=False,
+        **kwargs,
+    ):
         super().__init__()
         if kwargs:
-            logging.warning(
-                f"kwargs: {kwargs} are not used in {__class__.__name__}")
+            logging.warning(f"kwargs: {kwargs} are not used in {__class__.__name__}")
         stages = len(strides)
         self.strides = strides
 
         self.blocks = blocks if mlps is None else [len(mlp) for mlp in mlps]
-        radius = self._to_full_list(
-            radius, self.blocks, param_scaling=radius_scaling)
+        radius = self._to_full_list(radius, self.blocks, param_scaling=radius_scaling)
         num_samples = self._to_full_list(
-            num_samples, self.blocks, param_scaling=nsample_scaling)
+            num_samples, self.blocks, param_scaling=nsample_scaling
+        )
         self.radius = radius
         self.num_samples = num_samples
 
@@ -440,10 +483,9 @@ class PointNet2PartDecoder(nn.Module):
                     mlps_temp = [width] * (layers - 1)
                     width = width * 2 if strides[i] > 1 else width
                     mlps_temp += [width]
-                    mlps.append([mlps_temp] + [[width] * layers]
-                                * (self.blocks[i] - 1))
+                    mlps.append([mlps_temp] + [[width] * layers] * (self.blocks[i] - 1))
 
-            logging.info(f'channels is modified to {mlps}')
+            logging.info(f"channels is modified to {mlps}")
         self.mlps = mlps
 
         skip_channel_list = [in_channels]
@@ -461,13 +503,13 @@ class PointNet2PartDecoder(nn.Module):
         self.FP_modules = nn.ModuleList()
         if fp_mlps is None:
             fp_mlps = [[mlps[0][0][0]] * (decoder_layers + 1)]
-            fp_mlps += [[c] * (decoder_layers + 1)
-                        for c in skip_channel_list[1:-1]]
+            fp_mlps += [[c] * (decoder_layers + 1) for c in skip_channel_list[1:-1]]
 
         skip_channel_list[0] += 16
         for k in range(fp_mlps.__len__()):
-            pre_channel = fp_mlps[k + 1][-1] if k + \
-                1 < len(fp_mlps) else skip_channel_list[-1]
+            pre_channel = (
+                fp_mlps[k + 1][-1] if k + 1 < len(fp_mlps) else skip_channel_list[-1]
+            )
             self.FP_modules.append(
                 PointNetFPModule(
                     [pre_channel + skip_channel_list[k]] + fp_mlps[k],
@@ -491,7 +533,8 @@ class PointNet2PartDecoder(nn.Module):
                     param_list.append([param] * blocks[i])
                 else:
                     param_list.append(
-                        [param] + [param * param_scaling] * (blocks[i] - 1))
+                        [param] + [param * param_scaling] * (blocks[i] - 1)
+                    )
                     param *= param_scaling
         return param_list
 
@@ -502,10 +545,13 @@ class PointNet2PartDecoder(nn.Module):
             )
         B, N = l_xyz[0].shape[0:2]
         cls_one_hot = torch.zeros((B, 16), device=l_xyz[0].device)
-        cls_one_hot = cls_one_hot.scatter_(
-            1, cls_label, 1).unsqueeze(-1).repeat(1, 1, N)
+        cls_one_hot = (
+            cls_one_hot.scatter_(1, cls_label, 1).unsqueeze(-1).repeat(1, 1, N)
+        )
         l_features[0] = self.FP_modules[0](
-            l_xyz[0], l_xyz[1], torch.cat([cls_one_hot, l_features[0]], 1),
-            l_features[1]
+            l_xyz[0],
+            l_xyz[1],
+            torch.cat([cls_one_hot, l_features[0]], 1),
+            l_features[1],
         )
         return l_features[0]

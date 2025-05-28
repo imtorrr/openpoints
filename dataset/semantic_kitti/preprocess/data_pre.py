@@ -1,4 +1,7 @@
-import pickle, yaml, os, sys
+import pickle
+import yaml
+import os
+import sys
 import numpy as np
 from os.path import join, exists, dirname, abspath
 from sklearn.neighbors import KDTree
@@ -13,13 +16,17 @@ sys.path.append(ROOT_DIR)
 class DataProcessing:
     @staticmethod
     def load_pc_semantic3d(filename):
-        pc_pd = pd.read_csv(filename, header=None, delim_whitespace=True, dtype=np.float16)
+        pc_pd = pd.read_csv(
+            filename, header=None, delim_whitespace=True, dtype=np.float16
+        )
         pc = pc_pd.values
         return pc
 
     @staticmethod
     def load_label_semantic3d(filename):
-        label_pd = pd.read_csv(filename, header=None, delim_whitespace=True, dtype=np.uint8)
+        label_pd = pd.read_csv(
+            filename, header=None, delim_whitespace=True, dtype=np.uint8
+        )
         cloud_labels = label_pd.values
         return cloud_labels
 
@@ -36,7 +43,7 @@ class DataProcessing:
         label = label.reshape((-1))
         sem_label = label & 0xFFFF  # semantic label in lower half
         inst_label = label >> 16  # instance id in upper half
-        assert ((sem_label + (inst_label << 16) == label).all())
+        assert (sem_label + (inst_label << 16) == label).all()
         sem_label = remap_lut[sem_label]
         return sem_label.astype(np.int32)
 
@@ -49,19 +56,27 @@ class DataProcessing:
         val_file_list = []
         for seq_id in seq_list:
             seq_path = join(dataset_path, seq_id)
-            pc_path = join(seq_path, 'velodyne')
-            if seq_id == '08':
-                val_file_list.append([join(pc_path, f) for f in np.sort(os.listdir(pc_path))])
+            pc_path = join(seq_path, "velodyne")
+            if seq_id == "08":
+                val_file_list.append(
+                    [join(pc_path, f) for f in np.sort(os.listdir(pc_path))]
+                )
                 if seq_id == test_scan_num:
-                    test_file_list.append([join(pc_path, f) for f in np.sort(os.listdir(pc_path))])
+                    test_file_list.append(
+                        [join(pc_path, f) for f in np.sort(os.listdir(pc_path))]
+                    )
             elif int(seq_id) >= 11 and seq_id == test_scan_num:
-                test_file_list.append([join(pc_path, f) for f in np.sort(os.listdir(pc_path))])
-            elif seq_id in ['00', '01', '02', '03', '04', '05', '06', '07', '09', '10']:
-                train_file_list.append([join(pc_path, f) for f in np.sort(os.listdir(pc_path))])
+                test_file_list.append(
+                    [join(pc_path, f) for f in np.sort(os.listdir(pc_path))]
+                )
+            elif seq_id in ["00", "01", "02", "03", "04", "05", "06", "07", "09", "10"]:
+                train_file_list.append(
+                    [join(pc_path, f) for f in np.sort(os.listdir(pc_path))]
+                )
 
         train_file_list = np.concatenate(train_file_list, axis=0)
         val_file_list = np.concatenate(val_file_list, axis=0)
-        if test_scan_num != 'None':
+        if test_scan_num != "None":
             test_file_list = np.concatenate(test_file_list, axis=0)
         else:
             test_file_list = None
@@ -121,12 +136,21 @@ class DataProcessing:
         if (features is None) and (labels is None):
             return cpp_subsampling.compute(points, sampleDl=grid_size, verbose=verbose)
         elif labels is None:
-            return cpp_subsampling.compute(points, features=features, sampleDl=grid_size, verbose=verbose)
+            return cpp_subsampling.compute(
+                points, features=features, sampleDl=grid_size, verbose=verbose
+            )
         elif features is None:
-            return cpp_subsampling.compute(points, classes=labels, sampleDl=grid_size, verbose=verbose)
+            return cpp_subsampling.compute(
+                points, classes=labels, sampleDl=grid_size, verbose=verbose
+            )
         else:
-            return cpp_subsampling.compute(points, features=features, classes=labels, sampleDl=grid_size,
-                                           verbose=verbose)
+            return cpp_subsampling.compute(
+                points,
+                features=features,
+                classes=labels,
+                sampleDl=grid_size,
+                verbose=verbose,
+            )
 
     @staticmethod
     def IoU_from_confusions(confusions):
@@ -159,70 +183,112 @@ class DataProcessing:
     def get_class_weights(dataset_name):
         # pre-calculate the number of points in each category
         num_per_class = []
-        if dataset_name is 'S3DIS':
-            num_per_class = np.array([3370714, 2856755, 4919229, 318158, 375640, 478001, 974733,
-                                      650464, 791496, 88727, 1284130, 229758, 2272837], dtype=np.int32)
-        elif dataset_name is 'Semantic3D':
-            num_per_class = np.array([5181602, 5012952, 6830086, 1311528, 10476365, 946982, 334860, 269353],
-                                     dtype=np.int32)
-        elif dataset_name is 'SemanticKITTI':
-            num_per_class = np.array([55437630, 320797, 541736, 2578735, 3274484, 552662, 184064, 78858,
-                                      240942562, 17294618, 170599734, 6369672, 230413074, 101130274, 476491114,
-                                      9833174, 129609852, 4506626, 1168181])
+        if dataset_name == "S3DIS":
+            num_per_class = np.array(
+                [
+                    3370714,
+                    2856755,
+                    4919229,
+                    318158,
+                    375640,
+                    478001,
+                    974733,
+                    650464,
+                    791496,
+                    88727,
+                    1284130,
+                    229758,
+                    2272837,
+                ],
+                dtype=np.int32,
+            )
+        elif dataset_name == "Semantic3D":
+            num_per_class = np.array(
+                [5181602, 5012952, 6830086, 1311528, 10476365, 946982, 334860, 269353],
+                dtype=np.int32,
+            )
+        elif dataset_name == "SemanticKITTI":
+            num_per_class = np.array(
+                [
+                    55437630,
+                    320797,
+                    541736,
+                    2578735,
+                    3274484,
+                    552662,
+                    184064,
+                    78858,
+                    240942562,
+                    17294618,
+                    170599734,
+                    6369672,
+                    230413074,
+                    101130274,
+                    476491114,
+                    9833174,
+                    129609852,
+                    4506626,
+                    1168181,
+                ]
+            )
         weight = num_per_class / float(sum(num_per_class))
         ce_label_weight = 1 / (weight + 0.02)
         return np.expand_dims(ce_label_weight, axis=0)
 
 
-data_config = os.path.join(BASE_DIR, 'semantic-kitti.yaml')
-DATA = yaml.safe_load(open(data_config, 'r'))
+data_config = os.path.join(BASE_DIR, "semantic-kitti.yaml")
+DATA = yaml.safe_load(open(data_config, "r"))
 remap_dict = DATA["learning_map"]
 max_key = max(remap_dict.keys())
 remap_lut = np.zeros((max_key + 100), dtype=np.int32)
 remap_lut[list(remap_dict.keys())] = list(remap_dict.values())
 
 grid_size = 0.06
-dataset_path = '/data/WQ/DataSet/semantic-kitti/dataset/sequences'
-output_path = '/data/WQ/DataSet/semantic-kitti/dataset/sequences' + '_' + str(grid_size)
+dataset_path = "/data/WQ/DataSet/semantic-kitti/dataset/sequences"
+output_path = "/data/WQ/DataSet/semantic-kitti/dataset/sequences" + "_" + str(grid_size)
 seq_list = np.sort(os.listdir(dataset_path))
 
 for seq_id in seq_list:
-    print('sequence' + seq_id + ' start')
+    print("sequence" + seq_id + " start")
     seq_path = join(dataset_path, seq_id)
     seq_path_out = join(output_path, seq_id)
-    pc_path = join(seq_path, 'velodyne')
-    pc_path_out = join(seq_path_out, 'velodyne')
-    KDTree_path_out = join(seq_path_out, 'KDTree')
+    pc_path = join(seq_path, "velodyne")
+    pc_path_out = join(seq_path_out, "velodyne")
+    KDTree_path_out = join(seq_path_out, "KDTree")
     os.makedirs(seq_path_out) if not exists(seq_path_out) else None
     os.makedirs(pc_path_out) if not exists(pc_path_out) else None
     os.makedirs(KDTree_path_out) if not exists(KDTree_path_out) else None
 
     if int(seq_id) < 11:
-        label_path = join(seq_path, 'y')
-        label_path_out = join(seq_path_out, 'y')
+        label_path = join(seq_path, "y")
+        label_path_out = join(seq_path_out, "y")
         os.makedirs(label_path_out) if not exists(label_path_out) else None
         scan_list = np.sort(os.listdir(pc_path))
         for scan_id in scan_list:
             print(scan_id)
             points = DP.load_pc_kitti(join(pc_path, scan_id))
-            labels = DP.load_label_kitti(join(label_path, str(scan_id[:-4]) + '.label'), remap_lut)
-            sub_points, sub_labels = DP.grid_sub_sampling(points, labels=labels, grid_size=grid_size)
+            labels = DP.load_label_kitti(
+                join(label_path, str(scan_id[:-4]) + ".label"), remap_lut
+            )
+            sub_points, sub_labels = DP.grid_sub_sampling(
+                points, labels=labels, grid_size=grid_size
+            )
             search_tree = KDTree(sub_points)
-            KDTree_save = join(KDTree_path_out, str(scan_id[:-4]) + '.pkl')
+            KDTree_save = join(KDTree_path_out, str(scan_id[:-4]) + ".pkl")
             np.save(join(pc_path_out, scan_id)[:-4], sub_points)
             np.save(join(label_path_out, scan_id)[:-4], sub_labels)
-            with open(KDTree_save, 'wb') as f:
+            with open(KDTree_save, "wb") as f:
                 pickle.dump(search_tree, f)
-            if seq_id == '08':
-                proj_path = join(seq_path_out, 'proj')
+            if seq_id == "08":
+                proj_path = join(seq_path_out, "proj")
                 os.makedirs(proj_path) if not exists(proj_path) else None
                 proj_inds = np.squeeze(search_tree.query(points, return_distance=False))
                 proj_inds = proj_inds.astype(np.int32)
-                proj_save = join(proj_path, str(scan_id[:-4]) + '_proj.pkl')
-                with open(proj_save, 'wb') as f:
+                proj_save = join(proj_path, str(scan_id[:-4]) + "_proj.pkl")
+                with open(proj_save, "wb") as f:
                     pickle.dump([proj_inds], f)
     else:
-        proj_path = join(seq_path_out, 'proj')
+        proj_path = join(seq_path_out, "proj")
         os.makedirs(proj_path) if not exists(proj_path) else None
         scan_list = np.sort(os.listdir(pc_path))
         for scan_id in scan_list:
@@ -232,10 +298,10 @@ for seq_id in seq_list:
             search_tree = KDTree(sub_points)
             proj_inds = np.squeeze(search_tree.query(points, return_distance=False))
             proj_inds = proj_inds.astype(np.int32)
-            KDTree_save = join(KDTree_path_out, str(scan_id[:-4]) + '.pkl')
-            proj_save = join(proj_path, str(scan_id[:-4]) + '_proj.pkl')
+            KDTree_save = join(KDTree_path_out, str(scan_id[:-4]) + ".pkl")
+            proj_save = join(proj_path, str(scan_id[:-4]) + "_proj.pkl")
             np.save(join(pc_path_out, scan_id)[:-4], sub_points)
-            with open(KDTree_save, 'wb') as f:
+            with open(KDTree_save, "wb") as f:
                 pickle.dump(search_tree, f)
-            with open(proj_save, 'wb') as f:
+            with open(proj_save, "wb") as f:
                 pickle.dump([proj_inds], f)

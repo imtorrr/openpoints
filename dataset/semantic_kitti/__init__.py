@@ -1,1 +1,1 @@
-from .semantickitti import SemanticKITTI 
+from .semantickitti import SemanticKITTI
