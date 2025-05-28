@@ -52,7 +52,7 @@ class S3DIS(Dataset):
         split (str, optional): Defaults to 'train'.
         transform (_type_, optional): Defaults to None.
         loop (int, optional): split loops for each epoch. Defaults to 1.
-        presample (bool, optional): wheter to downsample each point cloud before training. Set to False to downsample on-the-fly. Defaults to False.
+        presample (bool, optional): whether to downsample each point cloud before training. Set to False to downsample on-the-fly. Defaults to False.
         variable (bool, optional): where to use the original number of points. The number of point per point cloud is variable. Defaults to False.
     """
     def __init__(self,
