@@ -3,6 +3,7 @@
 # Please cite "4D Spatio-Temporal ConvNets: Minkowski Convolutional Neural
 # Networks", CVPR'19 (https://arxiv.org/abs/1904.08755) if you use any part of
 # the code.
+import collections.abc
 import random
 import numpy as np
 import torch
@@ -97,13 +98,25 @@ class PointCloudXYZAlign(object):
             data[:, self.gravity_dim] -= torch.min(data[:, self.gravity_dim])
         return data
 
+@DataTransforms.register_module()
+class FixedPoints(object):
+    def __init__(self, num_points:int=4096, **kwargs):
+        self.num_points = num_points
+
+    def __call__(self, data):
+        N = len(data['pos'])
+        if N > self.num_points:
+            choice = torch.from_numpy(np.random.choice(N, self.num_points, replace=True)).long()
+            
+            for k, v in data.items():
+                if isinstance(v, torch.Tensor):
+                    data[k] = v[choice]
+        return data
+
 
 @DataTransforms.register_module()
 class RandomDropout(object):
     def __init__(self, dropout_ratio=0.2, dropout_application_ratio=0.2, **kwargs):
-        """
-        upright_axis: axis index among x,y,z, i.e. 2 for z
-        """
         self.dropout_ratio = dropout_ratio
         self.dropout_application_ratio = dropout_application_ratio
 
@@ -331,7 +344,7 @@ class PointCloudRotation(object):
         else:
             device = data.device
 
-        if isinstance(self.angle, collections.Iterable):
+        if isinstance(self.angle, collections.abc.Iterable):
             rot_mats = []
             for axis_ind, rot_bound in enumerate(self.angle):
                 theta = 0

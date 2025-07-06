@@ -9,6 +9,7 @@ import torch
 import laspy
 import threading
 from torch.utils.data import Dataset
+from torch_geometric.data import Data
 from ..data_util import crop_pc, voxelize
 from ..build import DATASETS
 
@@ -61,8 +62,16 @@ def save_tile(arr, out_path):
 class NIBIO_MLS(Dataset):
     classes = ["ground", "vegetation", "cwd", "stem"]
     num_classes = len(classes)
-    num_per_class = np.array(...)
-    class2color = {"ground": [], "vegetation": [], "cwd": [], "stem": []}
+    num_per_class = np.array(
+        [
+            38944970,
+            88990151,
+            463191,
+            19693742,
+        ],
+        dtype=np.int32,
+    )
+    class2color = {"ground": [0, 0, 255], "vegetation": [0, 255, 0], "cwd": [0, 255, 255], "stem": [255, 0, 0]}
     cmap = [*class2color.values()]
     gravity_dim = 2
 
@@ -71,6 +80,7 @@ class NIBIO_MLS(Dataset):
         data_root: str = "data/nibio_mls/",
         tile_size: float = 6,
         voxel_size: float = 0.04,
+        as_pyg:bool = True,
         split: str = "train",
         loop: int = 1,
         transform=None,
@@ -82,6 +92,7 @@ class NIBIO_MLS(Dataset):
         self.presample = presample
         self.shuffle = shuffle
         self.loop = loop
+        self.as_pyg = as_pyg
 
         self.raw_root = os.path.join(data_root, "raw")
         self.raw_list = glob.glob(os.path.join(self.raw_root, split, "*"))
@@ -147,11 +158,11 @@ class NIBIO_MLS(Dataset):
         else:
             data_path = self.data_list[data_idx]
             cdata = np.load(data_path).astype(np.float32)
-            coord, label = cdata[:, :3], cdata[3]
+            coord, label = np.split(cdata, [3], axis=1)
 
         coord -= np.min(coord, 0)
         label = label.squeeze(-1).astype(np.long)
-        data = {"pos": coord, "x": None, "y": label}
+        data = {"pos": coord, "y": label}
 
         if self.transform is not None:
             data = self.transform(data)
@@ -160,6 +171,12 @@ class NIBIO_MLS(Dataset):
             data["heights"] = torch.from_numpy(
                 coord[:, self.gravity_dim : self.gravity_dim + 1].astype(np.float32)
             )
+        
+        data["x"] = data["pos"]
+        
+        if self.as_pyg:
+            data = Data.from_dict(data)
+        
         return data
 
     def __len__(self):

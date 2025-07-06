@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from torch_geometric.data import Data
 import os
 import os.path as osp
 import ssl
@@ -202,15 +203,20 @@ def crop_pc(
 
 def get_features_by_keys(data, keys="pos,x"):
     key_list = keys.split(",")
-    if len(key_list) == 1:
-        return data[keys].transpose(1, 2).contiguous()
-    else:
-        return (
-            torch.cat([data[key] for key in keys.split(",")], -1)
-            .transpose(1, 2)
-            .contiguous()
-        )
-
+    tensors = []
+    for key in key_list:
+        try:
+            tensors.append(data[key.strip()])
+        except (KeyError, AttributeError):
+            raise ValueError(f"Key '{key}' not found in data.")
+        
+    result = torch.cat(tensors, dim=-1) if len(tensors) > 1 else tensors[0]
+    
+    
+    if isinstance(data, dict):
+        return result.transpose(1, 2).contiguous()
+    elif isinstance(data, Data):
+        return result.contiguous()
 
 def get_class_weights(num_per_class, normalize=False):
     weight = num_per_class / float(sum(num_per_class))

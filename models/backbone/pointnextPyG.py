@@ -3,7 +3,7 @@
 This file is still under development. DO NOT USE.
 """
 
-from typing import List
+from typing import List, Type
 import logging
 import torch
 import torch.nn as nn
@@ -349,19 +349,19 @@ class PyGPointNextEncoder(nn.Module):
 
     def __init__(
         self,
-        block,
-        blocks,  # depth
-        in_channels=6,
+        in_channels: int = 4,
         width=32,
+        blocks: List[int] = [1, 4, 7, 4, 4],  # depth
         strides=[4, 4, 4, 4],
-        nsample=[16, 16, 16, 16],
-        radius=0.1,
-        radius_scaling=2,
-        nsample_scaling=1,
-        aggr_args={"feature_type": "dp_fj", "reduction": "max"},
-        group_args={"NAME": "ballquery"},
-        norm_args={"norm": "bn"},
-        act_args={"act": "relu"},
+        block: str | Type[Block] = "Block",
+        nsample: int | List[int] =[16, 16, 16, 16],
+        radius: float | List[float]=0.1,
+        radius_scaling: int = 2,
+        nsample_scaling: int = 1,
+        aggr_args: dict={"feature_type": "dp_fj", "reduction": "max"},
+        group_args: dict={"NAME": "ballquery"},
+        norm_args: dict={"norm": "bn"},
+        act_args: dict={"act": "relu"},
         conv_args=None,
         mid_res=False,
         use_res=True,
@@ -416,7 +416,8 @@ class PyGPointNextEncoder(nn.Module):
             )
         self.encoder = nn.Sequential(*encoder)
         self.out_channels = channels[-1]
-
+        self.channel_list = channels
+        
     def _to_full_list(self, param, param_scaling=1):
         # param can be: radius, nsample
         param_list = []
@@ -505,123 +506,33 @@ class PyGPointNextDecoder(nn.Module):
 
     def __init__(
         self,
-        block,
-        decoder_blocks=[1, 1, 1, 1],  # depth
-        decoder_layers=2,
-        in_channels=6,
-        width=32,
-        strides=[1, 4, 4, 4, 4],
-        nsample=[8, 16, 16, 16, 16],
-        radius=0.1,
-        radius_scaling=2,
-        nsample_scaling=1,
-        aggr_args={"feature_type": "dp_fj", "reduction": "max"},
-        group_args={"NAME": "ballquery"},
-        norm_args={"norm": "bn"},
-        act_args={"act": "relu"},
-        conv_args=None,
-        mid_res=False,
-        expansion=1,
+        encoder_channel_list: List[int],
+        decoder_layers: int = 2,
+        decoder_stages: int = 4,
         **kwargs,
     ):
         super().__init__()
-        if kwargs:
-            logging.warning(f"kwargs: {kwargs} are not used in {__class__.__name__}")
-        if isinstance(block, str):
-            block = eval(block)
-        self.blocks = decoder_blocks
         self.decoder_layers = decoder_layers
-        self.strides = strides[:-1]
-        self.mid_res = mid_res
-        self.aggr_args = aggr_args
-        self.norm_args = norm_args
-        self.act_args = act_args
-        self.conv_args = conv_args
-        self.c = in_channels
-        self.in_channels = in_channels
-        self.expansion = expansion
+        self.in_channels = encoder_channel_list[-1]
+        skip_channels = encoder_channel_list[:-1]
+        if len(skip_channels) < decoder_stages:
+            skip_channels.insert(0, kwargs.get("in_channels", 3))
+        # the output channel after interpolation
+        fp_channels = encoder_channel_list[:decoder_stages]
 
-        # self.radii = self._to_full_list(radius, radius_scaling)
-        # self.nsample = self._to_full_list(nsample, nsample_scaling)
-        # logging.info(f'radius: {self.radii},\n nsample: {self.nsample}')
-
-        # width *2 after downsampling.
-        channels = []
-        initial_width = width
-        for stride in strides:
-            if stride != 1:
-                width *= 2
-            channels.append(width)
-
-        self.in_channels = channels[-1]
-        skip_channels = [in_channels] + channels[:-1]
-        fp_channels = [initial_width] + channels[:-1]
-        decoder = [[] for _ in range(len(decoder_blocks))]
-        for i in range(-1, -len(decoder_blocks) - 1, -1):
-            # group_args.radius = self.radii[i]
-            # group_args.nsample = self.nsample[i]
-            decoder[i] = self._make_dec(
-                skip_channels[i], fp_channels[i], block, decoder_blocks[i]
-            )
+        n_decoder_stages = len(fp_channels)
+        decoder = [[] for _ in range(n_decoder_stages)]
+        for i in range(-1, -n_decoder_stages - 1, -1):
+            decoder[i] = self._make_dec(skip_channels[i], fp_channels[i])
         self.decoder = nn.Sequential(*decoder)
-        self.out_channels = fp_channels[0]
-
-    def _to_full_list(self, param, param_scaling=1):
-        # param can be: radius, nsample
-        param_list = []
-        if isinstance(param, List):
-            # make param a full list
-            for i, value in enumerate(param):
-                value = [value] if not isinstance(value, List) else value
-                if len(value) != self.blocks[i]:
-                    value += [value[-1]] * (self.blocks[i] - len(value))
-                param_list.append(value)
-        else:  # radius is a scalar, then create a list
-            for i, stride in enumerate(self.strides):
-                if stride == 1:
-                    param_list.append([param] * self.blocks[i])
-                else:
-                    param_list.append(
-                        [param] + [param * param_scaling] * (self.blocks[i] - 1)
-                    )
-                    param *= param_scaling
-        return param_list
+        self.out_channels = fp_channels[-n_decoder_stages]
 
     def _make_dec(
-        self, skip_channels, fp_channels, block, blocks, group_args=None, is_head=False
-    ):
-        """_summary_
-
-        Args:
-            skip_channels (int): channels for the incomming upsampled features
-            fp_channels (_type_): channels for the output upsampled features
-            block (_type_): _description_
-            blocks (_type_): _description_
-            group_args (_type_, optional): _description_. Defaults to None.
-            is_head (bool, optional): _description_. Defaults to False.
-
-        Returns:
-            _type_: _description_
-        """
+        self, skip_channels, fp_channels):
         layers = []
-        if is_head:
-            mlp = [skip_channels] + [fp_channels] * self.decoder_layers
-        else:
-            mlp = [skip_channels + self.in_channels] + [
-                fp_channels
-            ] * self.decoder_layers
-        layers.append(FeaturePropogation(mlp, not is_head))
+        mlp = [skip_channels + self.in_channels] + [fp_channels] * self.decoder_layers
+        layers.append(FeaturePropogation(mlp))
         self.in_channels = fp_channels
-
-        # radii = group_args.radius
-        # nsample = group_args.nsample
-        # for i in range(1, blocks):
-        #     group_args.radius = radii[i]
-        #     group_args.nsample = nsample[i]
-        #     layers.append(block(self.in_channels, self.in_channels,
-        #                         aggr_args=self.aggr_args,
-        #                         norm_args=self.norm_args, act_args=self.act_args, group_args=group_args,
-        #                         conv_args=self.conv_args, mid_res=self.mid_res))
         return nn.Sequential(*layers)
 
     def forward(self, p, f, b):

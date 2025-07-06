@@ -7,6 +7,8 @@ import torch
 from easydict import EasyDict as edict
 from openpoints.utils import registry
 from openpoints.transforms import build_transforms_from_cfg
+from torch_geometric.data import Data as DataPyG
+from torch_geometric.loader import DataLoader as DataLoaderPyG
 
 DATASETS = registry.Registry("dataset")
 
@@ -85,12 +87,17 @@ def build_dataloader_from_cfg(
     )
     collate_fn = eval(collate_fn) if isinstance(collate_fn, str) else collate_fn
 
+    if isinstance(dataset[0], DataPyG):
+        collate_fn = None
+        dataloader_class = DataLoaderPyG
+    else:
+        dataloader_class = torch.utils.data.DataLoader
     shuffle = split == "train"
     if distributed:
         sampler = torch.utils.data.distributed.DistributedSampler(
             dataset, shuffle=shuffle
         )
-        dataloader = torch.utils.data.DataLoader(
+        dataloader = dataloader_class(
             dataset,
             batch_size=batch_size,
             num_workers=int(dataloader_cfg.num_workers),
@@ -101,7 +108,7 @@ def build_dataloader_from_cfg(
             pin_memory=True,
         )
     else:
-        dataloader = torch.utils.data.DataLoader(
+        dataloader = dataloader_class(
             dataset,
             batch_size=batch_size,
             num_workers=int(dataloader_cfg.num_workers),
