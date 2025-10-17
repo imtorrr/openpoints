@@ -36,9 +36,7 @@ class SmoothCrossEntropy(torch.nn.Module):
                 0,
             )
         if weight is not None:
-            self.weight = (
-                torch.from_numpy(weight).float().cuda(non_blocking=True).squeeze()
-            )
+            self.weight = torch.from_numpy(weight).float().cuda(non_blocking=True).squeeze()
         else:
             self.weight = None
 
@@ -77,14 +75,14 @@ class SmoothCrossEntropy(torch.nn.Module):
 class MaskedCrossEntropy(torch.nn.Module):
     def __init__(self, label_smoothing=0.2):
         super(MaskedCrossEntropy, self).__init__()
-        self.creterion = CrossEntropyLoss(label_smoothing=label_smoothing)
+        self.criterion = CrossEntropyLoss(label_smoothing=label_smoothing)
 
     def forward(self, logit, target, mask):
         logit = logit.transpose(1, 2).reshape(-1, logit.shape[1])
         target = target.flatten()
         mask = mask.flatten()
         idx = mask == 1
-        loss = self.creterion(logit[idx], target[idx])
+        loss = self.criterion(logit[idx], target[idx])
         return loss
 
 
@@ -180,9 +178,7 @@ class Poly1CrossEntropyLoss(torch.nn.Module):
             device=logits.device, dtype=logits.dtype
         )
         pt = torch.sum(labels_onehot * F.softmax(logits, dim=-1), dim=-1)
-        CE = F.cross_entropy(
-            input=logits, target=labels, reduction="none", weight=self.weight
-        )
+        CE = F.cross_entropy(input=logits, target=labels, reduction="none", weight=self.weight)
         poly1 = CE + self.epsilon * (1 - pt)
         if self.reduction == "mean":
             poly1 = poly1.mean()
@@ -246,11 +242,7 @@ class Poly1FocalLoss(torch.nn.Module):
             # if labels are of shape [N, ...] e.g. segmentation task
             # convert to one-hot tensor of shape [N, num_classes, ...]
             else:
-                labels = (
-                    F.one_hot(labels.unsqueeze(1), num_classes)
-                    .transpose(1, -1)
-                    .squeeze_(-1)
-                )
+                labels = F.one_hot(labels.unsqueeze(1), num_classes).transpose(1, -1).squeeze_(-1)
 
         labels = labels.to(device=logits.device, dtype=logits.dtype)
         ce_loss = F.binary_cross_entropy_with_logits(

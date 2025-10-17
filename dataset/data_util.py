@@ -7,6 +7,7 @@ import ssl
 import sys
 import urllib
 import h5py
+import itertools
 from typing import Optional
 
 
@@ -47,6 +48,8 @@ class IO:
     def _read_h5(cls, file_path):
         f = h5py.File(file_path, "r")
         return f["data"][()]
+    
+    
 
 
 # download
@@ -127,8 +130,8 @@ def ravel_hash_vec(arr):
     return keys
 
 
-def voxelize(coord, voxel_size=0.05, hash_type="fnv", mode=0):
-    discrete_coord = np.floor(coord / np.array(voxel_size))
+def voxelize(coord, voxel_size=0.05, hash_type="fnv", mode=0, offset: np.ndarray = np.array([0.0, 0.0, 0.0])):
+    discrete_coord = np.floor((coord + offset) / np.array(voxel_size))
     if hash_type == "ravel":
         key = ravel_hash_vec(discrete_coord)
     else:
@@ -199,6 +202,63 @@ def crop_pc(
         feat.astype(np.float32) if feat is not None else None,
         label.astype(np.long) if label is not None else None,
     )
+
+def tile_pc(
+    pc,
+    box_dim: float = 6.0,
+    box_overlap: float = 0.5,
+):
+    xmin, ymin = np.floor(np.min(pc[:, :2], axis=0))
+    xmax, ymax = np.ceil(np.max(pc[:, :2], axis=0))
+    zmin, zmax = np.min(pc[:, 2]), np.max(pc[:, 2])
+    overlap_dist = box_dim * box_overlap
+    stride = box_dim - overlap_dist
+    x_edges = np.arange(xmin - stride, xmax + stride, stride)
+    y_edges = np.arange(ymin - stride, ymax + stride, stride)
+    z_edges = np.arange(zmin - stride, zmax + stride, stride)
+    tiles = []
+    boxes = []
+    for x0, y0, z0 in itertools.product(x_edges, y_edges, z_edges):
+        x1 = x0 + box_dim
+        y1 = y0 + box_dim
+        z1 = z0 + box_dim
+        mask = (
+            (pc[:, 0] >= x0)
+            & (pc[:, 0] < x1)
+            & (pc[:, 1] >= y0)
+            & (pc[:, 1] < y1)
+            & (pc[:, 2] >= z0)
+            & (pc[:, 2] < z1)
+        )
+        if not np.any(mask):
+            continue
+        tiles.append(pc[mask])
+        boxes.append((x0, x1, y0, y1, z0, z1))
+
+    return tiles
+
+def tile_pc_fast(
+    pc,
+    box_dim: float = 6.0,
+    box_overlap: float = 0.5,
+    
+):
+    overlap_dist = box_dim * box_overlap
+    stride = box_dim - overlap_dist
+    shifts = []
+    # generate shift per axis "xyz"
+    for _ in range(3):
+        shifts.append(np.arange(0.0, box_dim, stride))
+    offset_list = [np.array(o, dtype=float) for o in itertools.product(*shifts)]
+    tiles = []
+    for off in offset_list:
+        idx_sort, voxel_idx, count = voxelize(pc[:, :3], voxel_size=6, mode=1, offset=off)
+        pc_sort = pc[idx_sort]  # points sorted by voxel
+        # Fastest: split once using cumulative counts (no per-voxel boolean masks)
+        cuts = np.cumsum(count)[:-1]  # split indices
+        tiles.extend(np.split(pc_sort, cuts))  # list of arrays, one per voxel
+
+    return tiles
 
 
 def get_features_by_keys(data, keys="pos,x"):
