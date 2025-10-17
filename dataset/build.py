@@ -7,8 +7,6 @@ import torch
 from easydict import EasyDict as edict
 from openpoints.utils import registry
 from openpoints.transforms import build_transforms_from_cfg
-from torch_geometric.data import Data as DataPyG
-from torch_geometric.loader import DataLoader as DataLoaderPyG
 
 DATASETS = registry.Registry("dataset")
 
@@ -32,6 +30,37 @@ def concat_collate_fn(datas):
         "batch": torch.LongTensor(batches),
     }
     return data
+
+
+def collate_to_pyg_batch(batch):
+    """
+    Collate function to combine a list of point cloud samples into a single
+    `torch_geometric.data.Batch` for use with standard `torch.utils.data.DataLoader`.
+
+    This function is typically used in point cloud segmentation tasks (e.g., Point Transformer),
+    where each item in the dataset returns a dictionary containing:
+      - `"pos"`: (N, 3) float tensor of point coordinates.
+      - `"x"`:   (N, C) optional feature tensor or `None`.
+      - `"y"`:   (N,)   long tensor of labels.
+      - (optional) `"heights"` or other per-point attributes.
+
+    Args:
+        batch (List[Dict[str, Any]]): A list of dataset items, each a dict with keys
+            compatible with `torch_geometric.data.Data`.
+
+    Returns:
+        Batch: A `torch_geometric.data.Batch` object containing all samples concatenated
+        along the point dimension, ready to be used in training or inference.
+
+    Example:
+        >>> loader = DataLoader(dataset, batch_size=8, collate_fn=concat_collate_fn)
+        >>> for batch in loader:
+        ...     print(batch.pos.shape)  # -> (total_points_in_batch, 3)
+    """
+    from torch_geometric.data import Data, Batch
+
+    data_list = [Data(**item) for item in batch]
+    return Batch.from_data_list(data_list)
 
 
 def build_dataset_from_cfg(cfg, default_args=None):
@@ -87,17 +116,10 @@ def build_dataloader_from_cfg(
     )
     collate_fn = eval(collate_fn) if isinstance(collate_fn, str) else collate_fn
 
-    if isinstance(dataset[0], DataPyG):
-        collate_fn = None
-        dataloader_class = DataLoaderPyG
-    else:
-        dataloader_class = torch.utils.data.DataLoader
     shuffle = split == "train"
     if distributed:
-        sampler = torch.utils.data.distributed.DistributedSampler(
-            dataset, shuffle=shuffle
-        )
-        dataloader = dataloader_class(
+        sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=shuffle)
+        dataloader = torch.utils.data.DataLoader(
             dataset,
             batch_size=batch_size,
             num_workers=int(dataloader_cfg.num_workers),
@@ -108,7 +130,7 @@ def build_dataloader_from_cfg(
             pin_memory=True,
         )
     else:
-        dataloader = dataloader_class(
+        dataloader = torch.utils.data.DataLoader(
             dataset,
             batch_size=batch_size,
             num_workers=int(dataloader_cfg.num_workers),
