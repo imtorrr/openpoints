@@ -12,10 +12,11 @@ class PointsToTensor(object):
     def __call__(self, data):
         keys = data.keys() if callable(data.keys) else data.keys
         for key in keys:
-            if not torch.is_tensor(data[key]):
-                if str(data[key].dtype) == "float64":
-                    data[key] = data[key].astype(np.float32)
-                data[key] = torch.from_numpy(np.array(data[key]))
+            if data[key] is not None:
+                if not torch.is_tensor(data[key]):
+                    if str(data[key].dtype) == "float64":
+                        data[key] = data[key].astype(np.float32)
+                    data[key] = torch.from_numpy(np.array(data[key]))
         return data
 
 
