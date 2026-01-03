@@ -7,6 +7,7 @@ import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 import pickle
+import joblib
 
 from ..build import DATASETS
 from ..data_util import crop_pc, tile_pc_fast
@@ -131,7 +132,7 @@ class LASDataset(Dataset):
         os.makedirs(processed_root, exist_ok=True)
 
         filename = os.path.join(
-            processed_root, f"las_{split}_{voxel_size:.3f}_{voxel_max}.pkl"
+            processed_root, f"las_{split}_{voxel_size:.3f}_{voxel_max}.joblib"
         )
 
         # Presample and cache if requested
@@ -194,13 +195,11 @@ class LASDataset(Dataset):
                 % (self.split, np.median(npoints), np.average(npoints), np.std(npoints))
             )
 
-            with open(filename, "wb") as f:
-                pickle.dump(self.data, f)
-                logging.info(f"{filename} saved successfully")
+            joblib.dump(self.data, filename, compress=3)
+            logging.info(f"{filename} saved successfully")
         elif presample:
-            with open(filename, "rb") as f:
-                self.data = pickle.load(f)
-                logging.info(f"{filename} loaded successfully")
+            self.data = joblib.load(filename)
+            logging.info(f"{filename} loaded successfully")
 
         self.data_idx = np.arange(len(self.data_list))
         assert len(self.data_idx) > 0
