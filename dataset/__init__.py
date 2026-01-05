@@ -5,6 +5,7 @@ from .modelnet import *
 from .s3dis import S3DIS, S3DISSphere
 from .nibio_mls import NIBIO_MLS
 from .las_dataset import LASDataset
+from .forinstance import FORInstanceV2
 from .shapenet import *
 from .semantic_kitti import *
 from .scanobjectnn import *
