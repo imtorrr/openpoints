@@ -92,116 +92,126 @@ class LASDataset(Dataset):
         self.variable = variable
         self.shuffle = shuffle
 
-        # Find raw LAS/LAZ files in split folder
+        # Setup paths
+        processed_root = os.path.join(data_root, "processed")
+        os.makedirs(processed_root, exist_ok=True)
+        tiled_root = os.path.join(data_root, "tiled", split)
+        os.makedirs(tiled_root, exist_ok=True)
         raw_root = os.path.join(data_root, "raw")
         self.raw_root = raw_root
         split_path = os.path.join(raw_root, split)
 
-        if not os.path.exists(split_path):
-            raise ValueError(f"Split folder not found: {split_path}")
-
-        # Find all .las and .laz files
-        self.data_list = []
-        self.data_list.extend(glob(os.path.join(split_path, "*.las")))
-        self.data_list.extend(glob(os.path.join(split_path, "*.laz")))
-
-        if len(self.data_list) == 0:
-            raise ValueError(f"No LAS/LAZ files found in {split_path}")
-
-        logging.info(f"Found {len(self.data_list)} LAS/LAZ files in {split} split")
-
-        # Setup tiled directory
-        tiled_root = os.path.join(data_root, "tiled", split)
-        os.makedirs(tiled_root, exist_ok=True)
-
-        # Tile LAS files if not already done
-        if len(os.listdir(tiled_root)) == 0:
-            logging.info(f"Tiling {len(self.data_list)} LAS/LAZ files...")
-            for data_path in tqdm(self.data_list, desc=f"Tiling LASDataset {split} split"):
-                print(data_path)
-                self._tile_las_file(data_path, tiled_root)
-
-        # Load tiled data list
-        self.data_list = glob(os.path.join(tiled_root, "*.npy"))
-
-        if len(self.data_list) == 0:
-            raise ValueError(f"No tiled data found in {tiled_root}")
-
-        # Setup processed/cached data
-        processed_root = os.path.join(data_root, "processed")
-        os.makedirs(processed_root, exist_ok=True)
-
-        filename = os.path.join(
+        # Path for processed cache
+        processed_filename = os.path.join(
             processed_root, f"las_{split}_{voxel_size:.3f}_{voxel_max}.joblib"
         )
 
-        # Presample and cache if requested
-        if presample and not os.path.exists(filename):
-            np.random.seed(0)
-            self.data = []
-            for data_path in tqdm(self.data_list, desc=f"Loading LASDataset {split} split"):
-                pc = np.load(data_path).astype(np.float32)
+        # 1. Check for processed data first (if presample is enabled)
+        if presample and os.path.exists(processed_filename):
+            self.data = joblib.load(processed_filename)
+            logging.info(f"Loaded processed data from {processed_filename}")
+            # Use len(self.data) directly, don't need data_list
+            self.data_list = []  # Not needed when loading from processed
+            self.data_idx = np.arange(len(self.data))
+        else:
+            # 2. Check for tiled data
+            tiled_files = glob(os.path.join(tiled_root, "*.npy"))
 
-                # Separate coordinates, features, and labels
-                coord = pc[:, :3]
-                coord -= np.min(coord, axis=0)
+            if tiled_files:
+                logging.info(f"Found {len(tiled_files)} tiled files")
+                self.data_list = tiled_files
+            else:
+                # 3. Look for raw data and tile it
+                if not os.path.exists(split_path):
+                    raise ValueError(f"Split folder not found: {split_path}")
 
-                # Extract features if any
-                feat = None
-                if pc.shape[1] > 3:
-                    if self.label_field is not None:
-                        # Last column is label, rest are features
-                        if pc.shape[1] > 4:
-                            feat = pc[:, 3:-1]
-                        label = pc[:, -1:]
+                # Find all .las and .laz files
+                self.data_list = []
+                self.data_list.extend(glob(os.path.join(split_path, "*.las")))
+                self.data_list.extend(glob(os.path.join(split_path, "*.laz")))
+
+                if len(self.data_list) == 0:
+                    raise ValueError(f"No LAS/LAZ files found in {split_path}")
+
+                logging.info(f"Found {len(self.data_list)} LAS/LAZ files in {split} split")
+
+                # Tile the files
+                logging.info(f"Tiling {len(self.data_list)} LAS/LAZ files...")
+                for data_path in tqdm(self.data_list, desc=f"Tiling LASDataset {split} split"):
+                    print(data_path)
+                    self._tile_las_file(data_path, tiled_root)
+
+                # Load the tiled files
+                self.data_list = glob(os.path.join(tiled_root, "*.npy"))
+
+                if len(self.data_list) == 0:
+                    raise ValueError(f"No tiled data found in {tiled_root}")
+
+            # 4. Create processed cache if needed
+            if presample:
+                np.random.seed(0)
+                self.data = []
+                for data_path in tqdm(self.data_list, desc=f"Loading LASDataset {split} split"):
+                    pc = np.load(data_path).astype(np.float32)
+
+                    # Separate coordinates, features, and labels
+                    coord = pc[:, :3]
+                    coord -= np.min(coord, axis=0)
+
+                    # Extract features if any
+                    feat = None
+                    if pc.shape[1] > 3:
+                        if self.label_field is not None:
+                            # Last column is label, rest are features
+                            if pc.shape[1] > 4:
+                                feat = pc[:, 3:-1]
+                            label = pc[:, -1:]
+                        else:
+                            # No labels, all non-xyz columns are features
+                            feat = pc[:, 3:]
+                            label = None
                     else:
-                        # No labels, all non-xyz columns are features
-                        feat = pc[:, 3:]
                         label = None
-                else:
-                    label = None
 
-                # Apply voxel downsampling
-                if voxel_size:
-                    coord, feat, label = crop_pc(
-                        coord,
-                        feat,
-                        label,
-                        self.split,
-                        self.voxel_size,
-                        self.voxel_max,
-                        downsample=True,
-                        variable=self.variable,
-                        shuffle=self.shuffle,
-                    )
+                    # Apply voxel downsampling
+                    if voxel_size:
+                        coord, feat, label = crop_pc(
+                            coord,
+                            feat,
+                            label,
+                            self.split,
+                            self.voxel_size,
+                            self.voxel_max,
+                            downsample=True,
+                            variable=self.variable,
+                            shuffle=self.shuffle,
+                        )
 
-                # Reconstruct point cloud
-                if label is not None:
-                    if feat is not None:
-                        pc = np.hstack((coord, feat, label)).astype(np.float32)
+                    # Reconstruct point cloud
+                    if label is not None:
+                        if feat is not None:
+                            pc = np.hstack((coord, feat, label)).astype(np.float32)
+                        else:
+                            pc = np.hstack((coord, label)).astype(np.float32)
                     else:
-                        pc = np.hstack((coord, label)).astype(np.float32)
-                else:
-                    if feat is not None:
-                        pc = np.hstack((coord, feat)).astype(np.float32)
-                    else:
-                        pc = coord.astype(np.float32)
+                        if feat is not None:
+                            pc = np.hstack((coord, feat)).astype(np.float32)
+                        else:
+                            pc = coord.astype(np.float32)
 
-                self.data.append(pc)
+                    self.data.append(pc)
 
-            npoints = np.array([len(data) for data in self.data])
-            logging.info(
-                "split: %s, median npoints %.1f, avg num points %.1f, std %.1f"
-                % (self.split, np.median(npoints), np.average(npoints), np.std(npoints))
-            )
+                npoints = np.array([len(data) for data in self.data])
+                logging.info(
+                    "split: %s, median npoints %.1f, avg num points %.1f, std %.1f"
+                    % (self.split, np.median(npoints), np.average(npoints), np.std(npoints))
+                )
 
-            joblib.dump(self.data, filename, compress=3)
-            logging.info(f"{filename} saved successfully")
-        elif presample:
-            self.data = joblib.load(filename)
-            logging.info(f"{filename} loaded successfully")
+                joblib.dump(self.data, processed_filename, compress=3)
+                logging.info(f"{processed_filename} saved successfully")
 
-        self.data_idx = np.arange(len(self.data_list))
+            self.data_idx = np.arange(len(self.data_list))
+
         assert len(self.data_idx) > 0
         logging.info(f"Totally {len(self.data_idx)} samples in {split} set")
 
