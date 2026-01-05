@@ -16,8 +16,10 @@ class WandbUrls:
         self.chart_url = "https://app.wandb.ai/{}/{}/runs/{}".format(
             entity, project, hash
         )
-        self.overview_url = "https://app.wandb.ai/{}/{}/runs/{}/overview".format(
-            entity, project, hash
+        self.overview_url = (
+            "https://app.wandb.ai/{}/{}/runs/{}/overview".format(
+                entity, project, hash
+            )
         )
         self.config_url = (
             "https://app.wandb.ai/{}/{}/runs/{}/files/hydra-config.yaml".format(
@@ -103,3 +105,34 @@ class Wandb:
 
         filename = os.path.basename(file_path)
         shutil.copyfile(file_path, os.path.join(wandb.run.dir, filename))
+
+    @staticmethod
+    def log_segmentation_predictions(
+        points, gt_labels, pred_labels, class_names=None, step=None, cmap=None
+    ):
+        if not Wandb.IS_ACTIVE:
+            raise RuntimeError("wandb is inactive, please launch first.")
+        import wandb
+        import numpy as np
+        from matplotlib import cm
+
+        cmap = cm.get_cmap("tab20")
+        max_label = max(gt_labels.max(), pred_labels.max())
+
+        # Convert labels to colors
+        gt_colors = (cmap(gt_labels / max(max_label, 1))[:, :3] * 255).astype(
+            np.uint8
+        )
+        pred_colors = (
+            cmap(pred_labels / max(max_label, 1))[:, :3] * 255
+        ).astype(np.uint8)
+
+        # Combine
+        gt_pc = np.concatenate([points, gt_colors], axis=1)
+        pred_pc = np.concatenate([points, pred_colors], axis=1)
+
+        log_dict = {
+            "ground_truth": wandb.Object3D(gt_pc),
+            "prediction": wandb.Object3D(pred_pc),
+        }
+        wandb.log(log_dict, step=step) 

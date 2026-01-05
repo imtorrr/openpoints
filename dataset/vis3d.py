@@ -37,7 +37,7 @@ def vis_points(
     import pyvista as pv
     from pyvista import themes
 
-    my_theme = themes.DefaultTheme()
+    my_theme = themes.Theme()
     my_theme.color = "black"
     my_theme.lighting = True
     my_theme.show_edges = True
@@ -94,7 +94,7 @@ def vis_multi_points(
     from pyvista import themes
     from matplotlib import cm
 
-    my_theme = themes.DefaultTheme()
+    my_theme = themes.Theme()
     my_theme.color = "black"
     my_theme.lighting = True
     my_theme.show_edges = True
@@ -155,7 +155,7 @@ def vis_neighbors(
     import pyvista as pv
     from pyvista import themes
 
-    my_theme = themes.DefaultTheme()
+    my_theme = themes.Theme()
     my_theme.color = "black"
     my_theme.lighting = True
     my_theme.show_edges = True

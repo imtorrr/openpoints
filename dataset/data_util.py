@@ -48,8 +48,6 @@ class IO:
     def _read_h5(cls, file_path):
         f = h5py.File(file_path, "r")
         return f["data"][()]
-    
-    
 
 
 # download
@@ -130,7 +128,13 @@ def ravel_hash_vec(arr):
     return keys
 
 
-def voxelize(coord, voxel_size=0.05, hash_type="fnv", mode=0, offset: np.ndarray = np.array([0.0, 0.0, 0.0])):
+def voxelize(
+    coord,
+    voxel_size=0.05,
+    hash_type="fnv",
+    mode=0,
+    offset: np.ndarray = np.array([0.0, 0.0, 0.0]),
+):
     discrete_coord = np.floor((coord + offset) / np.array(voxel_size))
     if hash_type == "ravel":
         key = ravel_hash_vec(discrete_coord)
@@ -139,7 +143,9 @@ def voxelize(coord, voxel_size=0.05, hash_type="fnv", mode=0, offset: np.ndarray
 
     idx_sort = np.argsort(key)
     key_sort = key[idx_sort]
-    _, voxel_idx, count = np.unique(key_sort, return_counts=True, return_inverse=True)
+    _, voxel_idx, count = np.unique(
+        key_sort, return_counts=True, return_inverse=True
+    )
     if mode == 0:  # train mode
         idx_select = (
             np.cumsum(np.insert(count, 0, 0)[0:-1])
@@ -176,9 +182,9 @@ def crop_pc(
         N = len(label)  # the number of points
         if N >= voxel_max:
             init_idx = np.random.randint(N) if "train" in split else N // 2
-            crop_idx = np.argsort(np.sum(np.square(coord - coord[init_idx]), 1))[
-                :voxel_max
-            ]
+            crop_idx = np.argsort(
+                np.sum(np.square(coord - coord[init_idx]), 1)
+            )[:voxel_max]
         elif not variable:
             # fill more points for non-variable case (batched data)
             cur_num_points = N
@@ -202,6 +208,7 @@ def crop_pc(
         feat.astype(np.float32) if feat is not None else None,
         label.astype(np.long) if label is not None else None,
     )
+
 
 def tile_pc(
     pc,
@@ -237,11 +244,11 @@ def tile_pc(
 
     return tiles
 
+
 def tile_pc_fast(
     pc,
     box_dim: float = 6.0,
     box_overlap: float = 0.5,
-    
 ):
     overlap_dist = box_dim * box_overlap
     stride = box_dim - overlap_dist
@@ -252,7 +259,9 @@ def tile_pc_fast(
     offset_list = [np.array(o, dtype=float) for o in itertools.product(*shifts)]
     tiles = []
     for off in offset_list:
-        idx_sort, voxel_idx, count = voxelize(pc[:, :3], voxel_size=6, mode=1, offset=off)
+        idx_sort, voxel_idx, count = voxelize(
+            pc[:, :3], voxel_size=6, mode=1, offset=off
+        )
         pc_sort = pc[idx_sort]  # points sorted by voxel
         # Fastest: split once using cumulative counts (no per-voxel boolean masks)
         cuts = np.cumsum(count)[:-1]  # split indices
@@ -269,14 +278,14 @@ def get_features_by_keys(data, keys="pos,x"):
             tensors.append(data[key.strip()])
         except (KeyError, AttributeError):
             raise ValueError(f"Key '{key}' not found in data.")
-        
+
     result = torch.cat(tensors, dim=-1) if len(tensors) > 1 else tensors[0]
-    
-    
+
     if isinstance(data, dict):
         return result.transpose(1, 2).contiguous()
     elif isinstance(data, Data):
         return result.contiguous()
+
 
 def get_class_weights(num_per_class, normalize=False):
     weight = num_per_class / float(sum(num_per_class))
@@ -287,3 +296,10 @@ def get_class_weights(num_per_class, normalize=False):
             ce_label_weight * len(ce_label_weight)
         ) / ce_label_weight.sum()
     return torch.from_numpy(ce_label_weight.astype(np.float32))
+
+
+def get_class_alpha(num_per_class):
+    inverse_freq = 1.0 / num_per_class
+
+    alpha = inverse_freq / inverse_freq.sum()
+    return torch.from_numpy(alpha.astype(np.float32))
