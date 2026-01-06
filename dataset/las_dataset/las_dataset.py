@@ -60,7 +60,7 @@ class LASDataset(Dataset):
         split: str = "train",
         tile_size: float = 6.0,
         tile_overlap: float = 0.5,
-        voxel_size: float = 0.04,
+        voxel_size: float = 0.02,
         voxel_max: int | None = None,
         min_points_per_tile: int = 2000,
         label_field: str | None = "classification",
@@ -102,8 +102,9 @@ class LASDataset(Dataset):
         split_path = os.path.join(raw_root, split)
 
         # Path for processed cache
+        var_suffix = "var" if variable else "fixed"
         processed_filename = os.path.join(
-            processed_root, f"las_{split}_{voxel_size:.3f}_{voxel_max}.joblib"
+            processed_root, f"las_{split}_{voxel_size:.3f}_{voxel_max}_{var_suffix}.joblib"
         )
 
         # 1. Check for processed data first (if presample is enabled)
