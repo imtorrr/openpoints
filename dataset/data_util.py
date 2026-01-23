@@ -97,8 +97,9 @@ def fnv_hash_vec(arr):
     FNV64-1A
     """
     assert arr.ndim == 2
-    # Floor first for negative coordinates
+    # Shift coordinates to positive before hashing to handle negative coordinates
     arr = arr.copy()
+    arr -= arr.min(0)  # Subtract minimum to ensure all values are non-negative
     arr = arr.astype(np.uint64, copy=False)
     hashed_arr = np.uint64(14695981039346656037) * np.ones(
         arr.shape[0], dtype=np.uint64
@@ -247,8 +248,12 @@ def tile_pc(
 
 def tile_pc_fast(
     pc,
+    las_path: str,
+    output_dir: str,
     box_dim: float = 6.0,
     box_overlap: float = 0.5,
+    voxel_max: Optional[int] = None,
+    min_points_per_tile: int = 2000,
 ):
     overlap_dist = box_dim * box_overlap
     stride = box_dim - overlap_dist
@@ -257,17 +262,35 @@ def tile_pc_fast(
     for _ in range(3):
         shifts.append(np.arange(0.0, box_dim, stride))
     offset_list = [np.array(o, dtype=float) for o in itertools.product(*shifts)]
-    tiles = []
     for off in offset_list:
         idx_sort, voxel_idx, count = voxelize(
-            pc[:, :3], voxel_size=6, mode=1, offset=off
+            pc[:, :3], voxel_size=box_dim, mode=1, offset=off
         )
         pc_sort = pc[idx_sort]  # points sorted by voxel
         # Fastest: split once using cumulative counts (no per-voxel boolean masks)
         cuts = np.cumsum(count)[:-1]  # split indices
-        tiles.extend(np.split(pc_sort, cuts))  # list of arrays, one per voxel
+        tile_list = np.split(pc_sort, cuts)  # list of arrays, one per voxel
 
-    return tiles
+        # Randomly sample points if tile exceeds voxel_max
+        if voxel_max is not None:
+            tile_list = [
+                tile[np.random.choice(len(tile), voxel_max, replace=False)]
+                if len(tile) > voxel_max
+                else tile
+                for tile in tile_list
+            ]
+
+        basename = os.path.basename(las_path)
+        filename, _ = os.path.splitext(basename)
+
+        for i, tile in enumerate(tile_list):
+            if (
+                len(tile) < min_points_per_tile
+            ):  # Skip tiles with too few points
+                continue
+            tile_name = f"{filename}_{off[0]}_{off[1]}_{off[2]}_{i}"
+            tile_path = os.path.join(output_dir, tile_name)
+            np.save(tile_path, tile)
 
 
 def get_features_by_keys(data, keys="pos,x"):

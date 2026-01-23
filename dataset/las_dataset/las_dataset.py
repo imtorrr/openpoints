@@ -104,7 +104,8 @@ class LASDataset(Dataset):
         # Path for processed cache
         var_suffix = "var" if variable else "fixed"
         processed_filename = os.path.join(
-            processed_root, f"las_{split}_{voxel_size:.3f}_{voxel_max}_{var_suffix}.joblib"
+            processed_root,
+            f"las_{split}_{voxel_size:.3f}_{voxel_max}_{var_suffix}.joblib",
         )
 
         # 1. Check for processed data first (if presample is enabled)
@@ -134,11 +135,15 @@ class LASDataset(Dataset):
                 if len(self.data_list) == 0:
                     raise ValueError(f"No LAS/LAZ files found in {split_path}")
 
-                logging.info(f"Found {len(self.data_list)} LAS/LAZ files in {split} split")
+                logging.info(
+                    f"Found {len(self.data_list)} LAS/LAZ files in {split} split"
+                )
 
                 # Tile the files
                 logging.info(f"Tiling {len(self.data_list)} LAS/LAZ files...")
-                for data_path in tqdm(self.data_list, desc=f"Tiling LASDataset {split} split"):
+                for data_path in tqdm(
+                    self.data_list, desc=f"Tiling LASDataset {split} split"
+                ):
                     print(data_path)
                     self._tile_las_file(data_path, tiled_root)
 
@@ -152,7 +157,9 @@ class LASDataset(Dataset):
             if presample:
                 np.random.seed(0)
                 self.data = []
-                for data_path in tqdm(self.data_list, desc=f"Loading LASDataset {split} split"):
+                for data_path in tqdm(
+                    self.data_list, desc=f"Loading LASDataset {split} split"
+                ):
                     pc = np.load(data_path).astype(np.float32)
 
                     # Separate coordinates, features, and labels
@@ -191,7 +198,9 @@ class LASDataset(Dataset):
                     # Reconstruct point cloud
                     if label is not None:
                         if feat is not None:
-                            pc = np.hstack((coord, feat, label)).astype(np.float32)
+                            pc = np.hstack((coord, feat, label)).astype(
+                                np.float32
+                            )
                         else:
                             pc = np.hstack((coord, label)).astype(np.float32)
                     else:
@@ -205,7 +214,12 @@ class LASDataset(Dataset):
                 npoints = np.array([len(data) for data in self.data])
                 logging.info(
                     "split: %s, median npoints %.1f, avg num points %.1f, std %.1f"
-                    % (self.split, np.median(npoints), np.average(npoints), np.std(npoints))
+                    % (
+                        self.split,
+                        np.median(npoints),
+                        np.average(npoints),
+                        np.std(npoints),
+                    )
                 )
 
                 joblib.dump(self.data, processed_filename, compress=3)
@@ -224,7 +238,7 @@ class LASDataset(Dataset):
             las_path: Path to LAS/LAZ file
             output_dir: Directory to save tiled .npy files
         """
-        # Read LAS file
+        # Read LAS file    
         las = laspy.read(las_path)
 
         # Extract coordinates (always XYZ)
@@ -242,7 +256,9 @@ class LASDataset(Dataset):
                     rgb = rgb / 255.0
                 features.append(rgb)
             except AttributeError:
-                logging.warning(f"RGB not found in {os.path.basename(las_path)}")
+                logging.warning(
+                    f"RGB not found in {os.path.basename(las_path)}"
+                )
 
         if self.use_intensity:
             try:
@@ -251,7 +267,9 @@ class LASDataset(Dataset):
                 intensity = intensity / intensity.max()
                 features.append(intensity)
             except AttributeError:
-                logging.warning(f"Intensity not found in {os.path.basename(las_path)}")
+                logging.warning(
+                    f"Intensity not found in {os.path.basename(las_path)}"
+                )
 
         if self.use_return_number:
             try:
@@ -260,7 +278,9 @@ class LASDataset(Dataset):
                 features.append(return_num)
                 features.append(num_returns)
             except AttributeError:
-                logging.warning(f"Return number not found in {os.path.basename(las_path)}")
+                logging.warning(
+                    f"Return number not found in {os.path.basename(las_path)}"
+                )
 
         # Extract labels if specified
         if self.label_field is not None:
@@ -287,20 +307,11 @@ class LASDataset(Dataset):
                 pc = np.hstack([coords, labels])
             else:
                 pc = coords
-
-        # Tile the point cloud
-        tiles = tile_pc_fast(pc, box_dim=self.tile_size, box_overlap=self.tile_overlap)
-
-        # Save each tile
-        basename = os.path.basename(las_path)
-        filename, _ = os.path.splitext(basename)
-
-        for i, tile in enumerate(tiles):
-            if len(tile) < self.min_points_per_tile:  # Skip tiles with too few points
-                continue
-            tile_name = f"{filename}_{i}"
-            tile_path = os.path.join(output_dir, tile_name)
-            np.save(tile_path, tile)
+        
+        tile_pc_fast(
+            pc, las_path, output_dir, box_dim=self.tile_size, box_overlap=self.tile_overlap, voxel_max=self.voxel_max, min_points_per_tile=self.min_points_per_tile
+        )
+        
 
     def __getitem__(self, idx):
         """
@@ -378,10 +389,24 @@ class LASDataset(Dataset):
         # Add heights if not already present
         if "heights" not in data.keys():
             data["heights"] = torch.from_numpy(
-                coord[:, self.gravity_dim : self.gravity_dim + 1].astype(np.float32)
+                coord[:, self.gravity_dim : self.gravity_dim + 1].astype(
+                    np.float32
+                )
             )
 
         return data
 
     def __len__(self):
         return len(self.data_idx) * self.loop
+
+
+if __name__ == "__main__":
+    dataset = LASDataset(
+        data_root="data/FORInstanceV2_cleaned/",
+        split="val",
+        voxel_max=30000,
+        label_field="semantic_seg",
+        label_offset=-1,
+        variable=True,
+        presample=False
+    )

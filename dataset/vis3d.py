@@ -37,7 +37,7 @@ def vis_points(
     import pyvista as pv
     from pyvista import themes
 
-    my_theme = themes.Theme()
+    my_theme = themes.DarkTheme()
     my_theme.color = "black"
     my_theme.lighting = True
     my_theme.show_edges = True
