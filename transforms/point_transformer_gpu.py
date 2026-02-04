@@ -98,16 +98,19 @@ class PointCloudXYZAlign(object):
             data[:, self.gravity_dim] -= torch.min(data[:, self.gravity_dim])
         return data
 
+
 @DataTransforms.register_module()
 class FixedPoints(object):
-    def __init__(self, num_points:int=4096, **kwargs):
+    def __init__(self, num_points: int = 4096, **kwargs):
         self.num_points = num_points
 
     def __call__(self, data):
-        N = len(data['pos'])
+        N = len(data["pos"])
         if N > self.num_points:
-            choice = torch.from_numpy(np.random.choice(N, self.num_points, replace=True)).long()
-            
+            choice = torch.from_numpy(
+                np.random.choice(N, self.num_points, replace=True)
+            ).long()
+
             for k, v in data.items():
                 if isinstance(v, torch.Tensor):
                     data[k] = v[choice]

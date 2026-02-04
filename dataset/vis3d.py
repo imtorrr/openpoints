@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import open3d as o3d
 
 """
 2022@PointNeXt, 
@@ -136,7 +137,8 @@ def vis_multi_points(
         )
     # plotter.link_views() # pyvista might have bug for linked_views. Comment this line out if you cannot see the visualzation result.
     if save_fig:
-        plotter.show(screenshot=f"{save_name}.png")
+        plotter.show(auto_close=False)
+        plotter.screenshot(f"{save_name}.png")
         plotter.close()
     else:
         plotter.show()
@@ -189,16 +191,24 @@ def vis_neighbors(
     plotter.show()
 
 
+# def write_obj(points, colors, out_filename):
+#     N = points.shape[0]
+#     fout = open(out_filename, "w")
+#     for i in range(N):
+#         c = colors[i]
+#         fout.write(
+#             "v %f %f %f %f %f %f\n"
+#             % (points[i, 0], points[i, 1], points[i, 2], c[0], c[1], c[2])
+#         )
+#     fout.close()
+
+
 def write_obj(points, colors, out_filename):
-    N = points.shape[0]
-    fout = open(out_filename, "w")
-    for i in range(N):
-        c = colors[i]
-        fout.write(
-            "v %f %f %f %f %f %f\n"
-            % (points[i, 0], points[i, 1], points[i, 2], c[0], c[1], c[2])
-        )
-    fout.close()
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+
+    o3d.io.write_point_cloud(out_filename, pcd)
 
 
 def read_obj(filename):

@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from torch_geometric.data import Data
+from scipy.interpolate import griddata
 import os
 import os.path as osp
 import ssl
@@ -144,9 +145,7 @@ def voxelize(
 
     idx_sort = np.argsort(key)
     key_sort = key[idx_sort]
-    _, voxel_idx, count = np.unique(
-        key_sort, return_counts=True, return_inverse=True
-    )
+    _, voxel_idx, count = np.unique(key_sort, return_counts=True, return_inverse=True)
     if mode == 0:  # train mode
         idx_select = (
             np.cumsum(np.insert(count, 0, 0)[0:-1])
@@ -171,7 +170,6 @@ def crop_pc(
 ):
     if voxel_size and downsample:
         # Is this shifting a must? I borrow it from Stratified Transformer and Point Transformer.
-        coord -= coord.min(0)
         uniq_idx = voxelize(coord, voxel_size)
         coord, feat, label = (
             coord[uniq_idx],
@@ -183,9 +181,9 @@ def crop_pc(
         N = len(label)  # the number of points
         if N >= voxel_max:
             init_idx = np.random.randint(N) if "train" in split else N // 2
-            crop_idx = np.argsort(
-                np.sum(np.square(coord - coord[init_idx]), 1)
-            )[:voxel_max]
+            crop_idx = np.argsort(np.sum(np.square(coord - coord[init_idx]), 1))[
+                :voxel_max
+            ]
         elif not variable:
             # fill more points for non-variable case (batched data)
             cur_num_points = N
@@ -203,7 +201,6 @@ def crop_pc(
             feat[crop_idx] if feat is not None else None,
             label[crop_idx] if label is not None else None,
         )
-    coord -= coord.min(0)
     return (
         coord.astype(np.float32),
         feat.astype(np.float32) if feat is not None else None,
@@ -284,13 +281,42 @@ def tile_pc_fast(
         filename, _ = os.path.splitext(basename)
 
         for i, tile in enumerate(tile_list):
-            if (
-                len(tile) < min_points_per_tile
-            ):  # Skip tiles with too few points
+            if len(tile) < min_points_per_tile:  # Skip tiles with too few points
                 continue
             tile_name = f"{filename}_{off[0]}_{off[1]}_{off[2]}_{i}"
             tile_path = os.path.join(output_dir, tile_name)
             np.save(tile_path, tile)
+
+
+def compute_hag(points, grid_size=10):
+    x, y, z = points[:, 0], points[:, 1], points[:, 2]
+
+    # bin points into grid cells
+    xi = ((x - x.min()) / grid_size).astype(int)
+    yi = ((y - y.min()) / grid_size).astype(int)
+
+    # find min z per cell
+    from collections import defaultdict
+
+    cell_min = defaultdict(lambda: np.inf)
+    for i in range(len(z)):
+        cell_min[(xi[i], yi[i])] = min(cell_min[(xi[i], yi[i])], z[i])
+
+    # interpolate ground surface and compute HAG
+    cell_centers = np.array(
+        [
+            [k[0] * grid_size + x.min(), k[1] * grid_size + y.min()]
+            for k in cell_min.keys()
+        ]
+    )
+    cell_z = np.array(list(cell_min.values()))
+
+    ground_z = griddata(
+        cell_centers, cell_z, points[:, :2], method="linear", fill_value=z.min()
+    )
+    hag = z - ground_z
+
+    return hag
 
 
 def get_features_by_keys(data, keys="pos,x"):

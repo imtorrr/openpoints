@@ -8,12 +8,14 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 import pickle
 import joblib
+import sys
 
-from ..build import DATASETS
-from ..data_util import crop_pc, tile_pc_fast
+sys.path.append(".")
+from openpoints.dataset.build import DATASETS
+from openpoints.dataset.data_util import compute_hag, crop_pc, tile_pc_fast
 
 
-@DATASETS.register_module()
+# @DATASETS.register_module()
 class LASDataset(Dataset):
     """
     Universal dataset for LAS/LAZ point clouds with automatic tiling.
@@ -65,6 +67,7 @@ class LASDataset(Dataset):
         min_points_per_tile: int = 2000,
         label_field: str | None = "classification",
         label_offset: int = 0,
+        use_approximate_hag: bool = False,
         use_rgb: bool = False,
         use_intensity: bool = False,
         use_return_number: bool = False,
@@ -83,6 +86,7 @@ class LASDataset(Dataset):
         self.min_points_per_tile = min_points_per_tile
         self.label_field = label_field
         self.label_offset = label_offset
+        self.use_approximate_hag = use_approximate_hag
         self.use_rgb = use_rgb
         self.use_intensity = use_intensity
         self.use_return_number = use_return_number
@@ -144,7 +148,6 @@ class LASDataset(Dataset):
                 for data_path in tqdm(
                     self.data_list, desc=f"Tiling LASDataset {split} split"
                 ):
-                    print(data_path)
                     self._tile_las_file(data_path, tiled_root)
 
                 # Load the tiled files
@@ -160,11 +163,10 @@ class LASDataset(Dataset):
                 for data_path in tqdm(
                     self.data_list, desc=f"Loading LASDataset {split} split"
                 ):
-                    pc = np.load(data_path).astype(np.float32)
+                    pc = np.load(data_path).astype(np.float64)
 
                     # Separate coordinates, features, and labels
                     coord = pc[:, :3]
-                    coord -= np.min(coord, axis=0)
 
                     # Extract features if any
                     feat = None
@@ -198,16 +200,14 @@ class LASDataset(Dataset):
                     # Reconstruct point cloud
                     if label is not None:
                         if feat is not None:
-                            pc = np.hstack((coord, feat, label)).astype(
-                                np.float32
-                            )
+                            pc = np.hstack((coord, feat, label)).astype(np.float64)
                         else:
-                            pc = np.hstack((coord, label)).astype(np.float32)
+                            pc = np.hstack((coord, label)).astype(np.float64)
                     else:
                         if feat is not None:
-                            pc = np.hstack((coord, feat)).astype(np.float32)
+                            pc = np.hstack((coord, feat)).astype(np.float64)
                         else:
-                            pc = coord.astype(np.float32)
+                            pc = coord.astype(np.float64)
 
                     self.data.append(pc)
 
@@ -238,7 +238,7 @@ class LASDataset(Dataset):
             las_path: Path to LAS/LAZ file
             output_dir: Directory to save tiled .npy files
         """
-        # Read LAS file    
+        # Read LAS file
         las = laspy.read(las_path)
 
         # Extract coordinates (always XYZ)
@@ -246,7 +246,11 @@ class LASDataset(Dataset):
 
         # Extract features
         features = []
-        if self.use_rgb:
+        if self.use_approximate_hag:
+            hag = compute_hag(coords, grid_size=5)
+            features.append(hag.reshape(-1, 1))
+
+        elif self.use_rgb:
             try:
                 rgb = np.vstack([las.red, las.green, las.blue]).T
                 # Normalize RGB to 0-1 if needed
@@ -256,9 +260,7 @@ class LASDataset(Dataset):
                     rgb = rgb / 255.0
                 features.append(rgb)
             except AttributeError:
-                logging.warning(
-                    f"RGB not found in {os.path.basename(las_path)}"
-                )
+                logging.warning(f"RGB not found in {os.path.basename(las_path)}")
 
         if self.use_intensity:
             try:
@@ -267,9 +269,7 @@ class LASDataset(Dataset):
                 intensity = intensity / intensity.max()
                 features.append(intensity)
             except AttributeError:
-                logging.warning(
-                    f"Intensity not found in {os.path.basename(las_path)}"
-                )
+                logging.warning(f"Intensity not found in {os.path.basename(las_path)}")
 
         if self.use_return_number:
             try:
@@ -307,11 +307,15 @@ class LASDataset(Dataset):
                 pc = np.hstack([coords, labels])
             else:
                 pc = coords
-        
         tile_pc_fast(
-            pc, las_path, output_dir, box_dim=self.tile_size, box_overlap=self.tile_overlap, voxel_max=self.voxel_max, min_points_per_tile=self.min_points_per_tile
+            pc,
+            las_path,
+            output_dir,
+            box_dim=self.tile_size,
+            box_overlap=self.tile_overlap,
+            voxel_max=self.voxel_max,
+            min_points_per_tile=self.min_points_per_tile,
         )
-        
 
     def __getitem__(self, idx):
         """
@@ -325,7 +329,7 @@ class LASDataset(Dataset):
         if self.presample:
             pc = self.data[data_idx]
             coord = pc[:, :3]
-
+            coord -= np.min(coord, axis=0)
             # Parse features and labels based on configuration
             feat = None
             label = None
@@ -340,7 +344,7 @@ class LASDataset(Dataset):
         else:
             # Load from file
             data_path = self.data_list[data_idx]
-            pc = np.load(data_path).astype(np.float32)
+            pc = np.load(data_path).astype(np.float64)
 
             # Extract coordinates
             coord = pc[:, :3]
@@ -389,9 +393,7 @@ class LASDataset(Dataset):
         # Add heights if not already present
         if "heights" not in data.keys():
             data["heights"] = torch.from_numpy(
-                coord[:, self.gravity_dim : self.gravity_dim + 1].astype(
-                    np.float32
-                )
+                coord[:, self.gravity_dim : self.gravity_dim + 1].astype(np.float64)
             )
 
         return data
@@ -401,12 +403,40 @@ class LASDataset(Dataset):
 
 
 if __name__ == "__main__":
-    dataset = LASDataset(
-        data_root="data/FORInstanceV2_cleaned/",
-        split="val",
+    train_dataset = LASDataset(
+        data_root="data/FORInstanceV2/",
+        split="train",
+        voxel_size=0.02,
         voxel_max=30000,
         label_field="semantic_seg",
         label_offset=-1,
         variable=True,
-        presample=False
+        presample=True,
+        use_approximate_hag=True,
     )
+    val_dataset = LASDataset(
+        data_root="data/FORInstanceV2/",
+        split="val",
+        voxel_size=0.02,
+        voxel_max=30000,
+        label_field="semantic_seg",
+        label_offset=-1,
+        variable=True,
+        presample=True,
+        use_approximate_hag=True,
+    )
+    test_dataset = LASDataset(
+        data_root="data/FORInstanceV2/",
+        split="test",
+        voxel_size=0.02,
+        voxel_max=30000,
+        label_field="semantic_seg",
+        label_offset=-1,
+        variable=True,
+        presample=False,
+        use_approximate_hag=True,
+    )
+
+    import pdb
+
+    pdb.set_trace()
