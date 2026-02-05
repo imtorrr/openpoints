@@ -163,7 +163,7 @@ class LASDataset(Dataset):
                 for data_path in tqdm(
                     self.data_list, desc=f"Loading LASDataset {split} split"
                 ):
-                    pc = np.load(data_path).astype(np.float64)
+                    pc = np.load(data_path).astype(np.float32)
 
                     # Separate coordinates, features, and labels
                     coord = pc[:, :3]
@@ -200,14 +200,14 @@ class LASDataset(Dataset):
                     # Reconstruct point cloud
                     if label is not None:
                         if feat is not None:
-                            pc = np.hstack((coord, feat, label)).astype(np.float64)
+                            pc = np.hstack((coord, feat, label)).astype(np.float32)
                         else:
-                            pc = np.hstack((coord, label)).astype(np.float64)
+                            pc = np.hstack((coord, label)).astype(np.float32)
                     else:
                         if feat is not None:
-                            pc = np.hstack((coord, feat)).astype(np.float64)
+                            pc = np.hstack((coord, feat)).astype(np.float32)
                         else:
-                            pc = coord.astype(np.float64)
+                            pc = coord.astype(np.float32)
 
                     self.data.append(pc)
 
@@ -243,6 +243,7 @@ class LASDataset(Dataset):
 
         # Extract coordinates (always XYZ)
         coords = np.vstack([las.x, las.y, las.z]).T
+        coords -= coords.min(0)
 
         # Extract features
         features = []
@@ -344,7 +345,7 @@ class LASDataset(Dataset):
         else:
             # Load from file
             data_path = self.data_list[data_idx]
-            pc = np.load(data_path).astype(np.float64)
+            pc = np.load(data_path).astype(np.float32)
 
             # Extract coordinates
             coord = pc[:, :3]
@@ -393,7 +394,7 @@ class LASDataset(Dataset):
         # Add heights if not already present
         if "heights" not in data.keys():
             data["heights"] = torch.from_numpy(
-                coord[:, self.gravity_dim : self.gravity_dim + 1].astype(np.float64)
+                coord[:, self.gravity_dim : self.gravity_dim + 1].astype(np.float32)
             )
 
         return data
