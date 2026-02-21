@@ -116,9 +116,13 @@ def build_dataloader_from_cfg(
     )
     collate_fn = eval(collate_fn) if isinstance(collate_fn, str) else collate_fn
 
+    prefetch_factor = dataloader_cfg.get("prefetch_factor", 2)
+
     shuffle = split == "train"
     if distributed:
-        sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=shuffle)
+        sampler = torch.utils.data.distributed.DistributedSampler(
+            dataset, shuffle=shuffle
+        )
         dataloader = torch.utils.data.DataLoader(
             dataset,
             batch_size=batch_size,
@@ -128,6 +132,7 @@ def build_dataloader_from_cfg(
             sampler=sampler,
             collate_fn=collate_fn,
             pin_memory=True,
+            prefetch_factor=prefetch_factor,
         )
     else:
         dataloader = torch.utils.data.DataLoader(
@@ -139,5 +144,6 @@ def build_dataloader_from_cfg(
             shuffle=shuffle,
             collate_fn=collate_fn,
             pin_memory=True,
+            prefetch_factor=prefetch_factor,
         )
     return dataloader
