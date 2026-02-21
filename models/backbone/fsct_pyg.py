@@ -133,12 +133,12 @@ class FSCTEncoderPyG(nn.Module):
         if sa2_mlp is None:
             sa2_mlp = [512 + 3, 512, 1024, 1024]
         else:
-            sa2_mlp = [sa1_mlp[-1] + in_channels] + sa2_mlp
+            sa2_mlp = [sa1_mlp[-1] + 3] + sa2_mlp
 
         if sa3_mlp is None:
             sa3_mlp = [1024 + 3, 1024, 2048, 2048]
         else:
-            sa3_mlp = [sa2_mlp[-1] + in_channels] + sa3_mlp
+            sa3_mlp = [sa2_mlp[-1] + 3] + sa3_mlp
 
         self.in_channels = in_channels
 
