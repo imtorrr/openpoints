@@ -29,7 +29,7 @@ def resume_model(model, cfg, pretrained_path=None):
     # load state dict
     state_dict = torch.load(pretrained_path, map_location="cpu")
     # parameter resume of base model
-    base_ckpt = {k.replace("module.", ""): v for k, v in state_dict["model"].items()}
+    base_ckpt = {k.removeprefix("module."): v for k, v in state_dict["model"].items()}
     model.load_state_dict(base_ckpt, strict=True)
 
     # parameter
@@ -183,7 +183,7 @@ def load_checkpoint(model, pretrained_path, module=None):
     for key in state_dict.keys():
         if key in ["model", "net", "network", "state_dict", "base_model"]:
             ckpt_state_dict = ckpt_state_dict[key]
-    base_ckpt = {k.replace("module.", ""): v for k, v in ckpt_state_dict.items()}
+    base_ckpt = {k.removeprefix("module."): v for k, v in ckpt_state_dict.items()}
     if module is not None:
         base_ckpt = {k: v for k, v in base_ckpt.items() if module in k}
 

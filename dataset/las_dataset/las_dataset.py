@@ -15,7 +15,7 @@ from openpoints.dataset.build import DATASETS
 from openpoints.dataset.data_util import compute_hag, crop_pc, tile_pc_fast
 
 
-# @DATASETS.register_module()
+@DATASETS.register_module()
 class LASDataset(Dataset):
     """
     Universal dataset for LAS/LAZ point clouds with automatic tiling.
